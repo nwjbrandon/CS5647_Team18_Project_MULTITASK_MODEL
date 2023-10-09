@@ -5,16 +5,16 @@ import pandas as pd
 import numpy as np
 import torchaudio
 from sklearn.model_selection import train_test_split
-from torch.optim import AdamW, Adam
+from torch.optim import AdamW, Adam, Adadelta
 from torch.optim.lr_scheduler import StepLR
 from collections import deque
 from tqdm import tqdm
 import glob
-
+import librosa
 
 def train_test_split_data():
     audio_files = glob.glob("tone_perfect/*.mp3")
-    train, test = train_test_split(audio_files, test_size=0.1)
+    train, test = train_test_split(audio_files, test_size=0.3, random_state=1)
     return train, test
 
 
@@ -29,32 +29,43 @@ class MyDataset(Dataset):
         return len(self.audio_files)
     
     def preprocess_data(self, audio_fname):
-        # https://github.com/pytorch/audio/issues/2363
-        waveform, sample_rate = torchaudio.load(audio_fname, normalize=True, format="mp3")
-        waveform = torch.mean(waveform, dim=0)
+        # # https://github.com/pytorch/audio/issues/2363
+        # # waveform, sample_rate = torchaudio.load(audio_fname, normalize=True, format="mp3")
+        # # waveform = torch.mean(waveform, dim=0)
 
 
-        # downsampling_transformation = torchaudio.transforms.Resample(sample_rate, self.sampling_rate)
-        # downsampled_waveform = downsampling_transformation(waveform)
-        # downsampled_waveform = downsampled_waveform.unsqueeze(0)
+        # # downsampling_transformation = torchaudio.transforms.Resample(sample_rate, self.sampling_rate)
+        # # downsampled_waveform = downsampling_transformation(waveform)
+        # # downsampled_waveform = downsampled_waveform.unsqueeze(0)
 
 
-        train_audio_transforms = nn.Sequential(
-            # torchaudio.transforms.Resample(sample_rate, self.sampling_rate),
-            torchaudio.transforms.MFCC(sample_rate=sample_rate, n_mfcc=60)
-        )
-        inp = train_audio_transforms(waveform)
+        # train_audio_transforms = nn.Sequential(
+        #     # torchaudio.transforms.Resample(sample_rate, self.sampling_rate),
+        #     torchaudio.transforms.MFCC(sample_rate=sample_rate, n_mfcc=60)
+        # )
+        # inp = train_audio_transforms(waveform)
 
+        # max_pad = 60
 
-        # print(self.max_timesteps, downsampled_waveform.shape[1])
-        assert self.max_timesteps >= inp.shape[1]
-        # print(inp.shape)
-        inp = torch.nn.functional.pad(inp, (0, self.max_timesteps - inp.shape[1]), mode='constant', value=0)
-        # print(inp.shape)
-        inp = inp.unsqueeze(0)
+        # # print(self.max_timesteps, downsampled_waveform.shape[1])
+        # # assert self.max_timesteps >= inp.shape[1]
+        # # print(inp.shape)
+        # # inp = torch.nn.functional.pad(inp, (0, max_pad - inp.shape[1]), mode='constant', value=0)
+        # # print(inp.shape)
+        # inp = inp.unsqueeze(0)
         # print(inp.shape)
         # raise
-        return inp
+        # return inp
+        max_pad = 60
+        audio, sample_rate = librosa.core.load(audio_fname)
+        mfcc = librosa.feature.mfcc(y=audio, sr=sample_rate, n_mfcc=60)
+        pad_width = max_pad - mfcc.shape[1]
+        mfcc = np.pad(mfcc, pad_width=((0, 0), (0, pad_width)), mode='constant')
+        mfcc = np.array([mfcc])
+        # print(mfcc.shape)
+        # raise
+        return mfcc
+
 
     def preprocess_label(self, audio_file):
         pinyin = audio_file.split("/")[-1].split(".")[0].split("_")[0]
@@ -106,14 +117,16 @@ class Model(nn.Module):
         super().__init__()
         self.feature_extractor = nn.Sequential(
             nn.Conv2d(1, 32, kernel_size=3, padding=1, bias=False),
-            nn.BatchNorm2d(32),
             nn.ReLU(),
+            nn.BatchNorm2d(32),
             # nn.MaxPool2d((2, 2)),
             nn.Conv2d(32, 48, kernel_size=3, padding=1, bias=False),
-            nn.BatchNorm2d(48),
             nn.ReLU(),
-            nn.MaxPool2d((2, 2)),
+            nn.BatchNorm2d(48),
+            # nn.ReLU(),
+            # nn.MaxPool2d((2, 2)),
             nn.Conv2d(48, 120, kernel_size=3, padding=1, bias=False),
+            nn.ReLU(),
             nn.BatchNorm2d(120),
             nn.MaxPool2d((2, 2)),
             nn.Dropout(0.25),
@@ -127,20 +140,29 @@ class Model(nn.Module):
             # nn.InstanceNorm1d(64),
             # nn.MaxPool1d(2),
             # nn.AdaptiveAvgPool2d(1),
-            nn.Flatten(start_dim=1),
         )
 
         # 5 tones
         self.prediction = nn.Sequential(
-            nn.Linear(135000, 5),
+            nn.Flatten(start_dim=1),
+            nn.Linear(108000, 128),
+            nn.ReLU(),
+            nn.Dropout(0.25),
+            nn.Linear(128, 64),
+            nn.ReLU(),
+            nn.Dropout(0.4),
+            nn.Linear(64, 5),
         )
 
     def forward(self, x):
         # print(x.shape)
         x = self.feature_extractor(x)
         # print(x.shape)
+        # print(x.shape)
         # raise
         x = self.prediction(x)
+        # print(x.shape)
+        # raise
         return x
 
 
@@ -207,8 +229,8 @@ def main():
     out = model(inp)
     print("Prediction: ", out.shape)
 
-    optimizer = Adam(model.parameters(), lr=0.003)
-    scheduler = StepLR(optimizer=optimizer, step_size=1, gamma=0.9, verbose=False,)
+    optimizer = Adadelta(model.parameters())
+    # scheduler = StepLR(optimizer=optimizer, step_size=1, gamma=0.9, verbose=False,)
     criterion = nn.CrossEntropyLoss()
 
     device = "mps"
@@ -226,7 +248,7 @@ def main():
         valid_loss = validate(
             model, test_dataloader, optimizer, criterion, device
         )
-        scheduler.step()
+        # scheduler.step()
         torch.save(
             {
                 "epoch": epoch,

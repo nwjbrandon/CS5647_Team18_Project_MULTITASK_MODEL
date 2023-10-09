@@ -32,35 +32,40 @@ import librosa.display
 # from google.colab import drive
 # drive.mount('/content/drive')
 from tqdm import tqdm
-def mp3tomfcc(file_path, max_pad):
-  audio, sample_rate = librosa.core.load(file_path)
-  mfcc = librosa.feature.mfcc(y=audio, sr=sample_rate, n_mfcc=60)
-  pad_width = max_pad - mfcc.shape[1]
-  mfcc = np.pad(mfcc, pad_width=((0, 0), (0, pad_width)), mode='constant')
-  return mfcc
+# def mp3tomfcc(file_path, max_pad):
+#   audio, sample_rate = librosa.core.load(file_path)
+#   mfcc = librosa.feature.mfcc(y=audio, sr=sample_rate, n_mfcc=60)
+#   pad_width = max_pad - mfcc.shape[1]
+#   mfcc = np.pad(mfcc, pad_width=((0, 0), (0, pad_width)), mode='constant')
+#   # print(mfcc.shape)
+#   # raise
+#   return mfcc
 
 
-# Compile MFCCs and extract labels: https://github.com/adhishthite/sound-mnist/blob/master/utils/wav2mfcc.py
+# # Compile MFCCs and extract labels: https://github.com/adhishthite/sound-mnist/blob/master/utils/wav2mfcc.py
 
-file_path1 = 'tone_perfect'
+# file_path1 = 'tone_perfect'
 
-mfccs = []
-labels = []
+# mfccs = []
+# labels = []
+# i = 0
+# for f in tqdm(os.listdir(file_path1)):
+#   if f.endswith('.mp3'):
+#     mfccs.append(mp3tomfcc(file_path1 + '/' + f, 60))
 
-for f in tqdm(os.listdir(file_path1)):
-  if f.endswith('.mp3'):
-    mfccs.append(mp3tomfcc(file_path1 + '/' + f, 60))
+#     # print(f)
+#     pinyin = int(f.split("_")[0][-1])
+#     labels.append(pinyin)
+#     if i == 5:
+#        break
+#     i += 1
+#     # print(pinyin)
+#     # raise
 
-    # print(f)
-    pinyin = int(f.split("_")[0][-1])
-    labels.append(pinyin)
-    # print(pinyin)
-    # raise
-
-mfccs = np.asarray(mfccs)
-print(mfccs.shape)
-labels = to_categorical(labels, num_classes=None)
-print(labels.shape)
+# mfccs = np.asarray(mfccs)
+# print(mfccs.shape)
+# labels = to_categorical(labels, num_classes=None)
+# print(labels.shape)
 
 
 def get_cnn_model(input_shape, num_classes):
@@ -85,19 +90,26 @@ def get_cnn_model(input_shape, num_classes):
     return model
 
 
-dim_1 = mfccs.shape[1]
-dim_2 = mfccs.shape[2]
+# dim_1 = mfccs.shape[1]
+# dim_2 = mfccs.shape[2]
 channels = 1
 classes = 5
 
-X = mfccs
-print(X.shape)
-X = X.reshape((mfccs.shape[0], dim_1, dim_2, channels))
-print(X.shape)
-y = labels
-input_shape = (dim_1, dim_2, channels)
+# X = mfccs
+# print(X.shape)
+# X = X.reshape((mfccs.shape[0], dim_1, dim_2, channels))
+# print(X.shape)
+# y = labels
+# input_shape = (dim_1, dim_2, channels)
 
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=1)
+# X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=1)
+X_train = np.load("X_train.npy")
+X_test = np.load("X_test.npy")
+y_train = np.load("y_train.npy")
+y_test = np.load("y_test.npy")
+dim_1 = X_train.shape[1]
+dim_2 = X_train.shape[2]
+input_shape = (dim_1, dim_2, channels)
 model = get_cnn_model(input_shape, classes)
 
 # from sklearn.utils import class_weight
@@ -106,7 +118,7 @@ model = get_cnn_model(input_shape, classes)
 
 history = model.fit(X_train, y_train, batch_size=20, epochs=15, verbose=1, validation_split=0.2)
 
-
+print(model.summary())
 # evaluate model
 model.evaluate(X_test, y_test, batch_size = 3, verbose = 1)
 
