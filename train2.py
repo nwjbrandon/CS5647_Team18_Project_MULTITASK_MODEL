@@ -22,8 +22,6 @@ train_data, test_data = train_test_split_data()
 
 class MyDataset(Dataset):
     def __init__(self, is_train):
-        self.sampling_rate = 16000
-        self.max_timesteps = 100
         if is_train:
             self.audio_fnames = train_data
         else:
@@ -37,9 +35,6 @@ class MyDataset(Dataset):
         inp = self.preprocess_data(audio_fname)
         label = self.preprocess_label(audio_fname)
         inp = torch.tensor(inp).unsqueeze(0)
-        # print(audio_fname)
-        # print(inp.shape, label)
-        # raise
         return inp, label
 
     def preprocess_data(self, audio_fname, max_pad=60):
@@ -48,7 +43,6 @@ class MyDataset(Dataset):
         pad_width = max_pad - mfcc.shape[1]
         mfcc = np.pad(mfcc, pad_width=((0, 0), (0, pad_width)), mode='constant')
         return mfcc
-        # return inp
 
     def preprocess_label(self, audio_file):
         tone = audio_file.split("/")[-1].split("_")[0][-1]
@@ -88,21 +82,22 @@ class Model(nn.Module):
             nn.Conv2d(64, 128, kernel_size=3, padding=1),
             nn.BatchNorm2d(128),
             nn.MaxPool2d(2),
-            # nn.Dropout(0.25)
+            nn.Dropout(0.25)
         )
 
         # # 5 tones
         self.prediction = nn.Sequential(
-            # nn.AdaptiveAvgPool2d(1),
             nn.Flatten(start_dim=1),
-            nn.Linear(28800, 5),
+            nn.Linear(28800, 128),
+            nn.Dropout(0.25),
+            nn.Linear(128, 64),
+            nn.Dropout(0.4),
+            nn.Linear(64, 5),
         )
 
     def forward(self, x):
         x = self.feature_extractor(x)
         out = self.prediction(x)
-        # print(out.shape)
-        # raise
         return out
 
 
@@ -121,10 +116,6 @@ def train(model, dataloader, optimizer, criterion, device):
         optimizer.step()
 
         _, predicted = torch.max(out.data, 1)
-        # print(out.data)
-        # print(predicted)
-        # print(label)
-        # raise
         label = label.detach().cpu().numpy().tolist()
         y_true.extend(label)
         predicted = predicted.detach().cpu().numpy().tolist()
