@@ -12,6 +12,7 @@ from tqdm import tqdm
 from torchvision.models import resnet18
 import glob
 import librosa
+import torchmetrics
 
 def train_test_split_data():
     audio_files = glob.glob("tone_perfect/*.mp3")
@@ -39,7 +40,7 @@ class MyDataset(Dataset):
 
     def preprocess_data(self, audio_fname, max_pad=60):
         audio, sample_rate = librosa.core.load(audio_fname)
-        mfcc = librosa.feature.mfcc(y=audio, sr=sample_rate, n_mfcc=60)
+        mfcc = librosa.feature.mfcc(y=audio, sr=sample_rate, n_mfcc=128)
         pad_width = max_pad - mfcc.shape[1]
         mfcc = np.pad(mfcc, pad_width=((0, 0), (0, pad_width)), mode='constant')
         return mfcc
@@ -58,12 +59,12 @@ def create_dataloader():
 
     train_dataloader = DataLoader(
         train_dataset,
-        batch_size=20,
+        batch_size=64,
         shuffle=True,
     )
     test_dataloader = DataLoader(
         test_dataset,
-        batch_size=20,
+        batch_size=64,
         shuffle=True,
     )
     return train_dataloader, test_dataloader
@@ -75,23 +76,26 @@ class Model(nn.Module):
             nn.Conv2d(1, 32, kernel_size=3, padding=1),
             nn.ReLU(),
             nn.BatchNorm2d(32),
+            nn.MaxPool2d(2),
             nn.Conv2d(32, 64, kernel_size=3, padding=1),
             nn.ReLU(),
             nn.BatchNorm2d(64),
             nn.MaxPool2d(2),
-            nn.Conv2d(64, 128, kernel_size=3, padding=1),
-            nn.BatchNorm2d(128),
-            nn.MaxPool2d(2),
-            nn.Dropout(0.25)
+            # nn.Conv2d(64, 128, kernel_size=3, padding=1),
+            # nn.ReLU(),
+            # nn.BatchNorm2d(128),
+            # nn.MaxPool2d(2),
+            # nn.Conv2d(128, 128, kernel_size=3, padding=1),
+            # nn.ReLU(),
+            # nn.BatchNorm2d(128),
+            # nn.MaxPool2d(2),
+            # nn.Dropout(0.25)
         )
 
         # # 5 tones
         self.prediction = nn.Sequential(
+            nn.AdaptiveAvgPool2d(1),
             nn.Flatten(start_dim=1),
-            nn.Linear(28800, 128),
-            nn.Dropout(0.25),
-            nn.Linear(128, 64),
-            nn.Dropout(0.4),
             nn.Linear(64, 5),
         )
 
@@ -106,6 +110,7 @@ def train(model, dataloader, optimizer, criterion, device):
     losses = []
     y_true = []
     y_pred = []
+    i = 0
     for img, label in tqdm(dataloader):
         inp = img.float().to(device)
         label = label.to(device)
@@ -122,10 +127,12 @@ def train(model, dataloader, optimizer, criterion, device):
         y_pred.extend(predicted)
         losses.append(loss.item())
 
+        # i += 1
+        # if i == 20:
+        #     break
+
     loss = np.sum(losses) / len(losses)
-    y_true = np.array(y_true)
-    y_pred = np.array(y_pred)
-    acc = np.sum(y_true == y_pred) / len(y_true)
+    acc = torchmetrics.Accuracy(task="multiclass", num_classes=5)(torch.tensor(y_pred), torch.tensor(y_true))
     return acc, loss
 
 
@@ -134,6 +141,7 @@ def validate(model, dataloader, optimizer, criterion, device):
     losses = []
     y_true = []
     y_pred = []
+    i = 0
     with torch.no_grad():
         for img, label in tqdm(dataloader):
             inp = img.float().to(device)
@@ -148,10 +156,12 @@ def validate(model, dataloader, optimizer, criterion, device):
             y_pred.extend(predicted)
             losses.append(loss.item())
 
+            # i += 1
+            # if i == 10:
+            #     break
+
     loss = np.sum(losses) / len(losses)
-    y_true = np.array(y_true)
-    y_pred = np.array(y_pred)
-    acc = np.sum(y_true == y_pred) / len(y_true)
+    acc = torchmetrics.Accuracy(task="multiclass", num_classes=5)(torch.tensor(y_pred), torch.tensor(y_true))
     return acc, loss
 
 
@@ -164,13 +174,13 @@ def main():
     out = model(inp)
     print("Prediction: ", out.shape)
 
-    optimizer = Adam(model.parameters(), lr=0.001)
-    # scheduler = StepLR(optimizer=optimizer, step_size=1, gamma=0.9, verbose=False,)
+    optimizer = AdamW(model.parameters(), lr=0.01)
+    scheduler = StepLR(optimizer=optimizer, step_size=1, gamma=0.9, verbose=False,)
     criterion = nn.CrossEntropyLoss()
 
     device = "mps"
-    model = Model()
-    out = model(inp)
+    # model = Model() # <-- Issue
+    # out = model(inp)
     model.to(device)
     print(model)
 
@@ -183,23 +193,23 @@ def main():
         valid_acc, valid_loss = validate(
             model, test_dataloader, optimizer, criterion, device
         )
-        # scheduler.step()
-        torch.save(
-            {
-                "epoch": epoch,
-                "model_state_dict": model.state_dict(),
-                "optimizer_state_dict": optimizer.state_dict(),
-                "train_loss": train_loss,
-                "valid_loss": valid_loss,
-            },
-            f"ckpts/pytorch_model_{epoch}.pth",
-        )
-        log = "Epoch: {}/{}, Train Acc={}, Val Acc={}".format(
-            epoch + 1, n_epochs, np.round(train_acc, 10), np.round(valid_acc, 10),
+        scheduler.step()
+        # torch.save(
+        #     {
+        #         "epoch": epoch,
+        #         "model_state_dict": model.state_dict(),
+        #         "optimizer_state_dict": optimizer.state_dict(),
+        #         "train_loss": train_loss,
+        #         "valid_loss": valid_loss,
+        #     },
+        #     f"ckpts/pytorch_model_{epoch}.pth",
+        # )
+        log = "Epoch: {}/{}, Train Acc={}, Val Acc={}, Train Loss={}, Val Loss={}".format(
+            epoch + 1, n_epochs, np.round(train_acc, 10), np.round(valid_acc, 10), np.round(train_loss, 10), np.round(valid_loss, 10),
         )
         print(log)
-        with open("ckpts/loss.txt", "a") as f:
-            f.write(f"{log}\n")
+        # with open("ckpts/loss.txt", "a") as f:
+        #     f.write(f"{log}\n")
 
 if __name__ == "__main__":
     main()
