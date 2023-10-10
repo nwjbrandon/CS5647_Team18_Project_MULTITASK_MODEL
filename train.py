@@ -1,50 +1,60 @@
+import glob
+
+import librosa
+import numpy as np
 import torch
 import torch.nn as nn
-from torch.utils.data import Dataset, DataLoader
-import pandas as pd
-import numpy as np
-import torchaudio
+import torchmetrics
 from sklearn.model_selection import train_test_split
-from torch.optim import AdamW, Adam, Adadelta
+from torch.optim import AdamW
 from torch.optim.lr_scheduler import StepLR
-from collections import deque
+from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
-import glob
-import librosa
+
 
 def train_test_split_data():
     audio_files = glob.glob("tone_perfect/*.mp3")
-    train, test = train_test_split(audio_files, test_size=0.3, random_state=1)
+    train, test = train_test_split(audio_files, test_size=0.2, random_state=42)
     return train, test
+
+
+train_data, test_data = train_test_split_data()
 
 
 class MyDataset(Dataset):
     def __init__(self, is_train):
         if is_train:
-            self.x = np.load("X_train.npy")
-            self.y = np.load("y_train.npy")
+            self.audio_fnames = train_data
         else:
-            self.x = np.load("X_test.npy")
-            self.y = np.load("y_test.npy")
-
+            self.audio_fnames = test_data
 
     def __len__(self):
-        return len(self.x)
-    
-    def __getitem__(self, index):
-        inp = self.x[index]
-        inp = torch.tensor(inp).permute(2, 0, 1)
+        return len(self.audio_fnames)
 
-        label = self.y[index]
-        label = int(np.argmax(label))
+    def __getitem__(self, index):
+        audio_fname = self.audio_fnames[index]
+        inp = self.preprocess_data(audio_fname)
+        label = self.preprocess_label(audio_fname)
+        inp = torch.tensor(inp).unsqueeze(0)
         return inp, label
+
+    def preprocess_data(self, audio_fname, max_pad=60):
+        audio, sample_rate = librosa.core.load(audio_fname)
+        mfcc = librosa.feature.mfcc(y=audio, sr=sample_rate, n_mfcc=128)
+        pad_width = max_pad - mfcc.shape[1]
+        mfcc = np.pad(mfcc, pad_width=((0, 0), (0, pad_width)), mode="constant")
+        return mfcc
+
+    def preprocess_label(self, audio_file):
+        tone = audio_file.split("/")[-1].split("_")[0][-1]
+        tone = int(tone) - 1
+        assert tone <= 3
+        return tone
 
 
 def create_dataloader():
-    train, test = train_test_split_data()
-
-    train_dataset = MyDataset(train)
-    test_dataset = MyDataset(test)
+    train_dataset = MyDataset(True)
+    test_dataset = MyDataset(False)
 
     inp, label = train_dataset[0]
     print("Sample data: ", inp.shape, label, len(train_dataset))
@@ -61,71 +71,35 @@ def create_dataloader():
     )
     return train_dataloader, test_dataloader
 
-class SelectItem(nn.Module):
-    def __init__(self, item_index):
-        super(SelectItem, self).__init__()
-        self._name = "selectitem"
-        self.item_index = item_index
-
-    def forward(self, inputs):
-        return inputs[self.item_index]
-
 
 class Model(nn.Module):
     def __init__(self):
         super().__init__()
         self.feature_extractor = nn.Sequential(
-            nn.Conv2d(1, 32, kernel_size=3, padding=1, bias=False),
+            nn.Conv2d(1, 32, kernel_size=3, padding=1),
             nn.ReLU(),
             nn.BatchNorm2d(32),
-            # nn.MaxPool2d((2, 2)),
-            nn.Conv2d(32, 48, kernel_size=3, padding=1, bias=False),
+            nn.MaxPool2d(2),
+            nn.Conv2d(32, 64, kernel_size=3, padding=1),
             nn.ReLU(),
-            nn.BatchNorm2d(48),
-            # nn.ReLU(),
-            # nn.MaxPool2d((2, 2)),
-            nn.Conv2d(48, 120, kernel_size=3, padding=1, bias=False),
-            nn.ReLU(),
-            nn.BatchNorm2d(120),
-            nn.MaxPool2d((2, 2)),
-            nn.Dropout(0.25),
-            # nn.Conv2d(64, 64, kernel_size=3, padding=1, bias=False),
-            # nn.BatchNorm2d(64),
-            # nn.MaxPool2d((2, 2)),
-            # nn.Conv1d(64, 64, kernel_size=13, padding=6, bias=False),
-            # nn.InstanceNorm1d(64),
-            # nn.MaxPool1d(2),
-            # nn.Conv1d(64, 64, kernel_size=13, padding=6, bias=False),
-            # nn.InstanceNorm1d(64),
-            # nn.MaxPool1d(2),
-            # nn.AdaptiveAvgPool2d(1),
+            nn.BatchNorm2d(64),
+            nn.MaxPool2d(2),
         )
 
-        # 5 tones
+        # 4 tones
         self.prediction = nn.Sequential(
+            nn.AdaptiveAvgPool2d(1),
             nn.Flatten(start_dim=1),
-            nn.Linear(108000, 128),
-            nn.ReLU(),
-            nn.Dropout(0.25),
-            nn.Linear(128, 64),
-            nn.ReLU(),
-            nn.Dropout(0.4),
-            nn.Linear(64, 5),
+            nn.Linear(64, 4),
         )
 
     def forward(self, x):
-        # print(x.shape)
         x = self.feature_extractor(x)
-        # print(x.shape)
-        # print(x.shape)
-        # raise
-        x = self.prediction(x)
-        # print(x.shape)
-        # raise
-        return x
+        out = self.prediction(x)
+        return out
 
 
-def train(model, dataloader, optimizer, criterion, device):
+def train(model, dataloader, optimizer, criterion, metric, device):
     model.train()
     losses = []
     y_true = []
@@ -146,14 +120,14 @@ def train(model, dataloader, optimizer, criterion, device):
         y_pred.extend(predicted)
         losses.append(loss.item())
 
+    y_pred = torch.tensor(y_pred)
+    y_true = torch.tensor(y_true)
     loss = np.sum(losses) / len(losses)
-    y_true = np.array(y_true)
-    y_pred = np.array(y_pred)
-    acc = np.sum(y_true == y_pred) / len(y_true)
+    acc = metric(y_pred, y_true)
     return acc, loss
 
 
-def validate(model, dataloader, optimizer, criterion, device):
+def validate(model, dataloader, optimizer, criterion, metric, device):
     model.eval()
     losses = []
     y_true = []
@@ -172,10 +146,10 @@ def validate(model, dataloader, optimizer, criterion, device):
             y_pred.extend(predicted)
             losses.append(loss.item())
 
+    y_pred = torch.tensor(y_pred)
+    y_true = torch.tensor(y_true)
     loss = np.sum(losses) / len(losses)
-    y_true = np.array(y_true)
-    y_pred = np.array(y_pred)
-    acc = np.sum(y_true == y_pred) / len(y_true)
+    acc = metric(y_pred, y_true)
     return acc, loss
 
 
@@ -188,32 +162,25 @@ def main():
     out = model(inp)
     print("Prediction: ", out.shape)
 
-    optimizer = Adadelta(
-        model.parameters(), 
-        lr=0.001,     
-        rho=0.95,
-        eps=1e-07,
-        weight_decay=0,
+    optimizer = AdamW(model.parameters(), lr=0.01)
+    scheduler = StepLR(
+        optimizer=optimizer,
+        step_size=1,
+        gamma=0.9,
+        verbose=False,
     )
-    # scheduler = StepLR(optimizer=optimizer, step_size=1, gamma=0.9, verbose=False,)
     criterion = nn.CrossEntropyLoss()
+    metric = torchmetrics.Accuracy(task="multiclass", num_classes=4)
 
     device = "mps"
-    model = Model()
-    out = model(inp)
     model.to(device)
     print(model)
 
-
     n_epochs = 50
     for epoch in range(n_epochs):
-        train_loss = train(
-            model, train_dataloader, optimizer, criterion, device
-        )
-        valid_loss = validate(
-            model, test_dataloader, optimizer, criterion, device
-        )
-        # scheduler.step()
+        train_acc, train_loss = train(model, train_dataloader, optimizer, criterion, metric, device)
+        valid_acc, valid_loss = validate(model, test_dataloader, optimizer, criterion, metric, device)
+        scheduler.step()
         torch.save(
             {
                 "epoch": epoch,
@@ -221,15 +188,23 @@ def main():
                 "optimizer_state_dict": optimizer.state_dict(),
                 "train_loss": train_loss,
                 "valid_loss": valid_loss,
+                "train_acc": train_acc,
+                "valid_acc": valid_acc,
             },
             f"ckpts/pytorch_model_{epoch}.pth",
         )
-        log = "Epoch: {}/{}, Train Loss={}, Val Loss={}".format(
-            epoch + 1, n_epochs, np.round(train_loss, 10), np.round(valid_loss, 10),
+        log = "Epoch: {}/{}, Train Acc={}, Val Acc={}, Train Loss={}, Val Loss={}".format(
+            epoch + 1,
+            n_epochs,
+            np.round(train_acc, 10),
+            np.round(valid_acc, 10),
+            np.round(train_loss, 10),
+            np.round(valid_loss, 10),
         )
         print(log)
         with open("ckpts/loss.txt", "a") as f:
             f.write(f"{log}\n")
+
 
 if __name__ == "__main__":
     main()
