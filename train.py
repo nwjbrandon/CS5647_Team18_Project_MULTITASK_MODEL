@@ -87,7 +87,6 @@ class Model(nn.Module):
             nn.MaxPool2d(2),
         )
 
-        # 4 tones
         self.prediction = nn.Sequential(
             nn.AdaptiveAvgPool2d(1),
             nn.Flatten(start_dim=1),
@@ -98,6 +97,16 @@ class Model(nn.Module):
         x = self.feature_extractor(x)
         out = self.prediction(x)
         return out
+
+
+class MultiTaskCrossEntropyLoss(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.tone_criterion = nn.CrossEntropyLoss()
+
+    def forward(self, out, tgt):
+        tone_loss = self.tone_criterion(out, tgt)
+        return tone_loss
 
 
 def train(model, dataloader, optimizer, criterion, metric, device):
@@ -188,10 +197,11 @@ def main():
         "learning_rate": 0.01,
         "test_size": 0.3,
         "random_state": 1,
-        "n_epochs": 20,
+        "n_epochs": 10,
         "n_mfcc": 128,
         "max_pad": 60,
     }
+    print(hyperparams)
 
     train_dataloader, test_dataloader = create_dataloader(hyperparams)
     inp, label = next(iter(train_dataloader))
@@ -211,7 +221,7 @@ def main():
         gamma=0.9,
         verbose=False,
     )
-    criterion = nn.CrossEntropyLoss()
+    criterion = MultiTaskCrossEntropyLoss()
     metric = torchmetrics.Accuracy(task="multiclass", num_classes=hyperparams["n_tones"])
 
     n_epochs = hyperparams["n_epochs"]
