@@ -133,7 +133,7 @@ def train(model, dataloader, optimizer, criterion, metric, device):
     y_pred = torch.tensor(y_pred)
     y_true = torch.tensor(y_true)
     loss = np.sum(losses) / len(losses)
-    acc = metric(y_pred, y_true)
+    acc = metric(y_pred, y_true).item()
     return acc, loss
 
 
@@ -159,7 +159,7 @@ def validate(model, dataloader, optimizer, criterion, metric, device):
     y_pred = torch.tensor(y_pred)
     y_true = torch.tensor(y_true)
     loss = np.sum(losses) / len(losses)
-    acc = metric(y_pred, y_true)
+    acc = metric(y_pred, y_true).item()
     return acc, loss
 
 
