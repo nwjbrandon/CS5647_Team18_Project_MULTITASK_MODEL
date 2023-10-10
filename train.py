@@ -1,155 +1,120 @@
-import torch
-import torch.nn as nn
-from torch.utils.data import Dataset, DataLoader
-import pandas as pd
-import numpy as np
-import torchaudio
-from sklearn.model_selection import train_test_split
-from torch.optim import AdamW, Adam
-from torch.optim.lr_scheduler import StepLR
-from collections import deque
-from tqdm import tqdm
 import glob
 
-
-def train_test_split_data():
-    audio_files = glob.glob("tone_perfect/*.mp3")
-    train, test = train_test_split(audio_files, test_size=0.1)
-    return train, test
+import librosa
+import numpy as np
+import pandas as pd
+import torch
+import torch.nn as nn
+import torchmetrics
+from sklearn.model_selection import train_test_split
+from torch.optim import AdamW
+from torch.optim.lr_scheduler import StepLR
+from torch.utils.data import DataLoader, Dataset
+from tqdm import tqdm
 
 
 class MyDataset(Dataset):
-    def __init__(self, audio_files):
-        self.audio_files = audio_files
-        self.sampling_rate = 16000
-        self.max_timesteps = 300
-
+    def __init__(self, audio_fnames, hyperparams):
+        self.audio_fnames = audio_fnames
+        self.hyperparams = hyperparams
+        self.n_mfcc = hyperparams["n_mfcc"]
+        self.max_pad = self.hyperparams["max_pad"]
 
     def __len__(self):
-        return len(self.audio_files)
-    
-    def preprocess_data(self, audio_fname):
-        # https://github.com/pytorch/audio/issues/2363
-        waveform, sample_rate = torchaudio.load(audio_fname, normalize=True, format="mp3")
-        waveform = torch.mean(waveform, dim=0)
-
-
-        # downsampling_transformation = torchaudio.transforms.Resample(sample_rate, self.sampling_rate)
-        # downsampled_waveform = downsampling_transformation(waveform)
-        # downsampled_waveform = downsampled_waveform.unsqueeze(0)
-
-
-        train_audio_transforms = nn.Sequential(
-            # torchaudio.transforms.Resample(sample_rate, self.sampling_rate),
-            torchaudio.transforms.MFCC(sample_rate=sample_rate, n_mfcc=60)
-        )
-        inp = train_audio_transforms(waveform)
-
-
-        # print(self.max_timesteps, downsampled_waveform.shape[1])
-        assert self.max_timesteps >= inp.shape[1]
-        # print(inp.shape)
-        inp = torch.nn.functional.pad(inp, (0, self.max_timesteps - inp.shape[1]), mode='constant', value=0)
-        # print(inp.shape)
-        inp = inp.unsqueeze(0)
-        # print(inp.shape)
-        # raise
-        return inp
-
-    def preprocess_label(self, audio_file):
-        pinyin = audio_file.split("/")[-1].split(".")[0].split("_")[0]
-        tone = int(pinyin[-1]) - 1
-        pinyin = pinyin[:-1]
-        return pinyin, tone
+        return len(self.audio_fnames)
 
     def __getitem__(self, index):
-        audio_file = self.audio_files[index]
+        audio_fname = self.audio_fnames[index]
+        inp = self.preprocess_data(audio_fname)
+        label = self.preprocess_label(audio_fname)
+        inp = torch.tensor(inp).unsqueeze(0)
+        return inp, label
 
-        inp = self.preprocess_data(audio_file)
-        pinyin, tone = self.preprocess_label(audio_file)
-        return inp, pinyin, tone
+    def preprocess_data(self, audio_fname):
+        audio, sample_rate = librosa.core.load(audio_fname)
+        mfcc = librosa.feature.mfcc(y=audio, sr=sample_rate, n_mfcc=self.n_mfcc)
+        pad_width = self.max_pad - mfcc.shape[1]
+        mfcc = np.pad(mfcc, pad_width=((0, 0), (0, pad_width)), mode="constant")
+        return mfcc
+
+    def preprocess_label(self, audio_file):
+        tone = audio_file.split("/")[-1].split("_")[0][-1]
+        tone = int(tone) - 1
+        assert tone <= 3
+        return tone
 
 
-def create_dataloader():
-    train, test = train_test_split_data()
+def train_test_split_data(hyperparams):
+    audio_files = glob.glob("tone_perfect/*.mp3")
+    train, test = train_test_split(audio_files, test_size=hyperparams["test_size"], random_state=hyperparams["random_state"])
+    return train, test
 
-    train_dataset = MyDataset(train)
-    test_dataset = MyDataset(test)
 
-    inp, pinyin, tone = train_dataset[0]
-    print("Sample data: ", inp.shape, pinyin, tone, len(train_dataset))
+def create_dataloader(hyperparams):
+    train_data, test_data = train_test_split_data(hyperparams)
+
+    train_dataset = MyDataset(train_data, hyperparams)
+    test_dataset = MyDataset(test_data, hyperparams)
+
+    inp, label = train_dataset[0]
+    print("Sample data: ", inp.shape, label, len(train_dataset))
 
     train_dataloader = DataLoader(
         train_dataset,
-        batch_size=64,
+        batch_size=hyperparams["batch_size"],
         shuffle=True,
     )
     test_dataloader = DataLoader(
         test_dataset,
-        batch_size=64,
+        batch_size=hyperparams["batch_size"],
         shuffle=True,
     )
     return train_dataloader, test_dataloader
 
-class SelectItem(nn.Module):
-    def __init__(self, item_index):
-        super(SelectItem, self).__init__()
-        self._name = "selectitem"
-        self.item_index = item_index
-
-    def forward(self, inputs):
-        return inputs[self.item_index]
-
 
 class Model(nn.Module):
-    def __init__(self):
+    def __init__(self, hyperparams):
         super().__init__()
+        self.hyperparams = hyperparams
         self.feature_extractor = nn.Sequential(
-            nn.Conv2d(1, 32, kernel_size=3, padding=1, bias=False),
+            nn.Conv2d(1, 32, kernel_size=3, padding=1),
+            nn.ReLU(),
             nn.BatchNorm2d(32),
+            nn.MaxPool2d(2),
+            nn.Conv2d(32, 64, kernel_size=3, padding=1),
             nn.ReLU(),
-            # nn.MaxPool2d((2, 2)),
-            nn.Conv2d(32, 48, kernel_size=3, padding=1, bias=False),
-            nn.BatchNorm2d(48),
-            nn.ReLU(),
-            nn.MaxPool2d((2, 2)),
-            nn.Conv2d(48, 120, kernel_size=3, padding=1, bias=False),
-            nn.BatchNorm2d(120),
-            nn.MaxPool2d((2, 2)),
-            nn.Dropout(0.25),
-            # nn.Conv2d(64, 64, kernel_size=3, padding=1, bias=False),
-            # nn.BatchNorm2d(64),
-            # nn.MaxPool2d((2, 2)),
-            # nn.Conv1d(64, 64, kernel_size=13, padding=6, bias=False),
-            # nn.InstanceNorm1d(64),
-            # nn.MaxPool1d(2),
-            # nn.Conv1d(64, 64, kernel_size=13, padding=6, bias=False),
-            # nn.InstanceNorm1d(64),
-            # nn.MaxPool1d(2),
-            # nn.AdaptiveAvgPool2d(1),
-            nn.Flatten(start_dim=1),
+            nn.BatchNorm2d(64),
+            nn.MaxPool2d(2),
         )
 
-        # 5 tones
         self.prediction = nn.Sequential(
-            nn.Linear(135000, 5),
+            nn.AdaptiveAvgPool2d(1),
+            nn.Flatten(start_dim=1),
+            nn.Linear(64, self.hyperparams["n_tones"]),
         )
 
     def forward(self, x):
-        # print(x.shape)
         x = self.feature_extractor(x)
-        # print(x.shape)
-        # raise
-        x = self.prediction(x)
-        return x
+        out = self.prediction(x)
+        return out
 
 
-def train(model, dataloader, optimizer, criterion, device):
+class MultiTaskCrossEntropyLoss(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.tone_criterion = nn.CrossEntropyLoss()
+
+    def forward(self, out, tgt):
+        tone_loss = self.tone_criterion(out, tgt)
+        return tone_loss
+
+
+def train(model, dataloader, optimizer, criterion, metric, device):
     model.train()
     losses = []
     y_true = []
     y_pred = []
-    for img, _, label in tqdm(dataloader):
+    for img, label in tqdm(dataloader):
         inp = img.float().to(device)
         label = label.to(device)
         optimizer.zero_grad()
@@ -165,20 +130,20 @@ def train(model, dataloader, optimizer, criterion, device):
         y_pred.extend(predicted)
         losses.append(loss.item())
 
+    y_pred = torch.tensor(y_pred)
+    y_true = torch.tensor(y_true)
     loss = np.sum(losses) / len(losses)
-    y_true = np.array(y_true)
-    y_pred = np.array(y_pred)
-    acc = np.sum(y_true == y_pred) / len(y_true)
+    acc = metric(y_pred, y_true).item()
     return acc, loss
 
 
-def validate(model, dataloader, optimizer, criterion, device):
+def validate(model, dataloader, optimizer, criterion, metric, device):
     model.eval()
     losses = []
     y_true = []
     y_pred = []
     with torch.no_grad():
-        for img, _, label in tqdm(dataloader):
+        for img, label in tqdm(dataloader):
             inp = img.float().to(device)
             label = label.to(device)
             out = model(inp)
@@ -191,58 +156,96 @@ def validate(model, dataloader, optimizer, criterion, device):
             y_pred.extend(predicted)
             losses.append(loss.item())
 
+    y_pred = torch.tensor(y_pred)
+    y_true = torch.tensor(y_true)
     loss = np.sum(losses) / len(losses)
-    y_true = np.array(y_true)
-    y_pred = np.array(y_pred)
-    acc = np.sum(y_true == y_pred) / len(y_true)
+    acc = metric(y_pred, y_true).item()
     return acc, loss
 
 
-def main():
-    train_dataloader, test_dataloader = create_dataloader()
-    inp, _, tones = next(iter(train_dataloader))
-    print("Sample Batch: ", inp.shape, tones.shape)
+def save_checkpoint(epoch, model, optimizer, train_loss, valid_loss, train_acc, valid_acc):
+    torch.save(
+        {
+            "epoch": epoch,
+            "model_state_dict": model.state_dict(),
+            "optimizer_state_dict": optimizer.state_dict(),
+            "train_loss": train_loss,
+            "valid_loss": valid_loss,
+            "train_acc": train_acc,
+            "valid_acc": valid_acc,
+        },
+        f"ckpts/pytorch_model_{epoch}.pth",
+    )
 
-    model = Model()
+
+def print_training_log(epoch, n_epochs, train_loss, valid_loss, train_acc, valid_acc):
+    log = "Epoch: {}/{}, Train Acc={}, Val Acc={}, Train Loss={}, Val Loss={}".format(
+        epoch + 1,
+        n_epochs,
+        np.round(train_acc, 4),
+        np.round(valid_acc, 4),
+        np.round(train_loss, 4),
+        np.round(valid_loss, 4),
+    )
+    print(log)
+
+
+def main():
+    hyperparams = {
+        "batch_size": 64,
+        "n_tones": 4,
+        "learning_rate": 0.01,
+        "test_size": 0.3,
+        "random_state": 1,
+        "n_epochs": 10,
+        "n_mfcc": 128,
+        "max_pad": 60,
+    }
+    print(hyperparams)
+
+    train_dataloader, test_dataloader = create_dataloader(hyperparams)
+    inp, label = next(iter(train_dataloader))
+    print("Sample Batch: ", inp.shape, label.shape)
+
+    model = Model(hyperparams)
     out = model(inp)
     print("Prediction: ", out.shape)
-
-    optimizer = Adam(model.parameters(), lr=0.003)
-    scheduler = StepLR(optimizer=optimizer, step_size=1, gamma=0.9, verbose=False,)
-    criterion = nn.CrossEntropyLoss()
-
     device = "mps"
-    model = Model()
-    out = model(inp)
     model.to(device)
     print(model)
 
+    optimizer = AdamW(model.parameters(), lr=hyperparams["learning_rate"])
+    scheduler = StepLR(
+        optimizer=optimizer,
+        step_size=1,
+        gamma=0.9,
+        verbose=False,
+    )
+    criterion = MultiTaskCrossEntropyLoss()
+    metric = torchmetrics.Accuracy(task="multiclass", num_classes=hyperparams["n_tones"])
 
-    n_epochs = 50
+    n_epochs = hyperparams["n_epochs"]
+    records = []
     for epoch in range(n_epochs):
-        train_loss = train(
-            model, train_dataloader, optimizer, criterion, device
-        )
-        valid_loss = validate(
-            model, test_dataloader, optimizer, criterion, device
-        )
+        train_acc, train_loss = train(model, train_dataloader, optimizer, criterion, metric, device)
+        valid_acc, valid_loss = validate(model, test_dataloader, optimizer, criterion, metric, device)
         scheduler.step()
-        torch.save(
+
+        save_checkpoint(epoch, model, optimizer, train_loss, valid_loss, train_acc, valid_acc)
+        print_training_log(epoch, n_epochs, train_loss, valid_loss, train_acc, valid_acc)
+        records.append(
             {
                 "epoch": epoch,
-                "model_state_dict": model.state_dict(),
-                "optimizer_state_dict": optimizer.state_dict(),
                 "train_loss": train_loss,
                 "valid_loss": valid_loss,
-            },
-            f"ckpts/pytorch_model_{epoch}.pth",
+                "train_acc": train_acc,
+                "valid_acc": valid_acc,
+            }
         )
-        log = "Epoch: {}/{}, Train Loss={}, Val Loss={}".format(
-            epoch + 1, n_epochs, np.round(train_loss, 10), np.round(valid_loss, 10),
-        )
-        print(log)
-        with open("ckpts/loss.txt", "a") as f:
-            f.write(f"{log}\n")
+
+    df = pd.DataFrame(records)
+    df.to_csv("ckpts/training_logs.csv", sep=",", index=False)
+
 
 if __name__ == "__main__":
     main()
