@@ -215,8 +215,91 @@ def create_dataloader_tone_perfect_siamese(hyperparams):
     return train_dataloader, test_dataloader
 
 
+class TonePerfectMultiTaskDataset(Dataset):
+    def __init__(self, audio_fnames, hyperparams):
+        self.audio_fnames = audio_fnames
+        self.hyperparams = hyperparams
+        self.n_mfcc = hyperparams["n_mfcc"]
+        self.max_pad = self.hyperparams["max_pad"]
+        self.dataset = self.hyperparams["dataset"]
+        self.n_classes = self.hyperparams["n_classes"]
+
+        self.tones = []
+        self.pinyins = []
+        self.labels = []
+        self.load_labels()
+
+    def load_labels(self):
+        with open("tones.json") as f:
+            self.tones = json.load(f)
+        with open("pinyins.json") as f:
+            self.pinyins = json.load(f)
+        with open("labels.json") as f:
+            self.labels = json.load(f)
+
+    def __len__(self):
+        return len(self.audio_fnames)
+
+    def __getitem__(self, index):
+        audio_fname = self.audio_fnames[index]
+        inp = self.preprocess_data(audio_fname)
+        inp = torch.tensor(inp).unsqueeze(0)
+
+        tone = self.get_tone_label(audio_fname)
+        pinyin = self.get_pinyin_label(audio_fname)
+
+        return inp, tone, pinyin
+
+    def preprocess_data(self, audio_fname):
+        audio, sample_rate = librosa.core.load(audio_fname)
+        mfcc = librosa.feature.mfcc(y=audio, sr=sample_rate, n_mfcc=self.n_mfcc)
+        pad_width = self.max_pad - mfcc.shape[1]
+        mfcc = np.pad(mfcc, pad_width=((0, 0), (0, pad_width)), mode="constant")
+        return mfcc
+
+    def get_tone_label(self, audio_file):
+        gt = audio_file.split("/")[-1].split("_")[0][-1]
+        gt = int(gt)
+        gt = self.tones.index(gt)
+        assert gt != -1
+        return gt
+
+    def get_pinyin_label(self, audio_file):
+        gt = audio_file.split("/")[-1].split("_")[0][:-1]
+        gt = self.pinyins.index(gt)
+        assert gt != -1
+        return gt
+
+
+def create_dataloader_tone_perfect_multitask(hyperparams):
+    audio_files = glob.glob("tone_perfect/*.mp3")
+    train_data, test_data = train_test_split(
+        audio_files, test_size=hyperparams["test_size"], random_state=hyperparams["random_state"]
+    )
+
+    train_dataset = TonePerfectMultiTaskDataset(train_data, hyperparams)
+    test_dataset = TonePerfectMultiTaskDataset(test_data, hyperparams)
+
+    print("n train: ", len(train_dataset))
+    print("n test: ", len(test_dataset))
+
+    train_dataloader = DataLoader(
+        train_dataset,
+        batch_size=hyperparams["batch_size"],
+        shuffle=True,
+    )
+    test_dataloader = DataLoader(
+        test_dataset,
+        batch_size=hyperparams["batch_size"],
+        shuffle=True,
+    )
+    return train_dataloader, test_dataloader
+
+
 def create_dataloaders(hyperparams, mode=None):
     if mode == "SIAMESE":
         return create_dataloader_tone_perfect_siamese(hyperparams)
+    elif mode == "MULTITASK":
+        return create_dataloader_tone_perfect_multitask(hyperparams)
     else:
         return create_dataloader_tone_perfect(hyperparams)
