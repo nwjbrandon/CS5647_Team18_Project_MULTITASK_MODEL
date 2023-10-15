@@ -4,6 +4,7 @@ import json
 
 import librosa
 import numpy as np
+import pandas as pd
 import torch
 from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader, Dataset
@@ -123,7 +124,7 @@ def train_test_split_data(hyperparams):
     return train, test
 
 
-def create_dataloader(hyperparams):
+def create_dataloader_tone_perfect(hyperparams):
     train_data, test_data = train_test_split_data(hyperparams)
 
     train_dataset = TonePerfectDataset(train_data, hyperparams)
@@ -143,3 +144,79 @@ def create_dataloader(hyperparams):
         shuffle=True,
     )
     return train_dataloader, test_dataloader
+
+
+class TonePerfectSiameseDataset(Dataset):
+    def __init__(self, df, hyperparams):
+        self.df = df
+        self.hyperparams = hyperparams
+        self.n_mfcc = hyperparams["n_mfcc"]
+        self.max_pad = self.hyperparams["max_pad"]
+        self.dataset = self.hyperparams["dataset"]
+        self.n_classes = self.hyperparams["n_classes"]
+
+        self.tones = []
+        self.pinyins = []
+        self.labels = []
+        self.load_labels()
+
+    def load_labels(self):
+        with open("tones.json") as f:
+            self.tones = json.load(f)
+        with open("pinyins.json") as f:
+            self.pinyins = json.load(f)
+        with open("labels.json") as f:
+            self.labels = json.load(f)
+
+    def __len__(self):
+        return len(self.df)
+
+    def __getitem__(self, index):
+        audio_fname1 = self.df.iloc[index]["audio_fname1"]
+        audio_fname2 = self.df.iloc[index]["audio_fname2"]
+        is_same = self.df.iloc[index]["is_same"]
+
+        inp1 = self.preprocess_data(audio_fname1)
+        inp1 = torch.tensor(inp1).unsqueeze(0)
+
+        inp2 = self.preprocess_data(audio_fname2)
+        inp2 = torch.tensor(inp2).unsqueeze(0)
+
+        return inp1, inp2, is_same
+
+    def preprocess_data(self, audio_fname):
+        audio, sample_rate = librosa.core.load(audio_fname)
+        mfcc = librosa.feature.mfcc(y=audio, sr=sample_rate, n_mfcc=self.n_mfcc)
+        pad_width = self.max_pad - mfcc.shape[1]
+        mfcc = np.pad(mfcc, pad_width=((0, 0), (0, pad_width)), mode="constant")
+        return mfcc
+
+
+def create_dataloader_tone_perfect_siamese(hyperparams):
+    train_df = pd.read_csv("annotation_train.csv").sample(frac=1, random_state=42), 
+    test_df = pd.read_csv("annotation_test.csv").sample(frac=1, random_state=42)
+
+    train_dataset = TonePerfectSiameseDataset(train_df, hyperparams)
+    test_dataset = TonePerfectSiameseDataset(test_df, hyperparams)
+
+    print("n train: ", len(train_dataset))
+    print("n test: ", len(test_dataset))
+
+    train_dataloader = DataLoader(
+        train_dataset,
+        batch_size=hyperparams["batch_size"],
+        shuffle=True,
+    )
+    test_dataloader = DataLoader(
+        test_dataset,
+        batch_size=hyperparams["batch_size"],
+        shuffle=True,
+    )
+    return train_dataloader, test_dataloader
+
+
+def create_dataloaders(hyperparams, mode=None):
+    if mode == "SIAMESE":
+        return create_dataloader_tone_perfect_siamese(hyperparams)
+    else:
+        return create_dataloader_tone_perfect(hyperparams)

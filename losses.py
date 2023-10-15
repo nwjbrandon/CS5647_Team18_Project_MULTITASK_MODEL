@@ -9,3 +9,13 @@ class ClassificationLoss(nn.Module):
     def forward(self, out, tgt):
         loss = self.criterion(out, tgt)
         return loss
+
+
+class SiameseLoss(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.criterion = nn.BCEWithLogitsLoss()
+
+    def forward(self, out, tgt):
+        loss = self.criterion(out, tgt)
+        return loss

@@ -2,7 +2,7 @@ import torchmetrics
 from torch.optim import Adam
 from torch.optim.lr_scheduler import StepLR
 
-from datasets import create_dataloader
+from datasets import create_dataloaders
 from losses import ClassificationLoss
 from models import ClassificationModel
 from trainers import ClassificationTrainer
@@ -60,7 +60,7 @@ def main():
     hyperparams = get_hyperparams("TONES")
     print(hyperparams)
 
-    train_dataloader, test_dataloader = create_dataloader(hyperparams)
+    train_dataloader, test_dataloader = create_dataloaders(hyperparams)
 
     model = ClassificationModel(hyperparams)
     device = hyperparams["device"]
