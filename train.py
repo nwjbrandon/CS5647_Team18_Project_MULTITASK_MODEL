@@ -8,19 +8,53 @@ from models import Model
 from trainers import ClassificationTrainer
 
 
+def get_hyperparams(mode):
+    if mode == "TONES":
+        hyperparams = {
+            "dataset": "TONES",
+            "batch_size": 32,
+            "n_classes": 4,
+            "learning_rate": 0.03,
+            "n_epochs": 30,
+            "device": "mps",
+            "test_size": 0.2,
+            "random_state": 42,
+            "n_mfcc": 128,
+            "max_pad": 60,
+        }
+    elif mode == "PINYINS":
+        hyperparams = {
+            "dataset": "PINYINS",
+            "batch_size": 32,
+            "n_classes": 410,
+            "learning_rate": 0.03,
+            "n_epochs": 30,
+            "device": "mps",
+            "test_size": 0.2,
+            "random_state": 42,
+            "n_mfcc": 128,
+            "max_pad": 60,
+        }
+    elif mode == "LABELS":
+        hyperparams = {
+            "dataset": "LABELS",
+            "batch_size": 32,
+            "n_classes": 1640,
+            "learning_rate": 0.03,
+            "n_epochs": 30,
+            "device": "mps",
+            "test_size": 0.2,
+            "random_state": 42,
+            "n_mfcc": 128,
+            "max_pad": 60,
+        }
+    else:
+        raise "Invalid Dataset"
+    return hyperparams
+
+
 def main():
-    hyperparams = {
-        "dataset": "TONES",
-        "batch_size": 32,
-        "n_classes": 4,
-        "learning_rate": 0.03,
-        "n_epochs": 30,
-        "device": "mps",
-        "test_size": 0.2,
-        "random_state": 42,
-        "n_mfcc": 128,
-        "max_pad": 60,
-    }
+    hyperparams = get_hyperparams("TONES")
     print(hyperparams)
 
     train_dataloader, test_dataloader = create_dataloader(hyperparams)
