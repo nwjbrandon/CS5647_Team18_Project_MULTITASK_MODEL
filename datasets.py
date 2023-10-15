@@ -193,7 +193,7 @@ class TonePerfectSiameseDataset(Dataset):
 
 
 def create_dataloader_tone_perfect_siamese(hyperparams):
-    train_df = pd.read_csv("annotation_train.csv").sample(frac=1, random_state=42), 
+    train_df = pd.read_csv("annotation_train.csv").sample(frac=1, random_state=42)
     test_df = pd.read_csv("annotation_test.csv").sample(frac=1, random_state=42)
 
     train_dataset = TonePerfectSiameseDataset(train_df, hyperparams)
