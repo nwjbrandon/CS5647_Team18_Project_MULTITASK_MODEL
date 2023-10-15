@@ -47,6 +47,32 @@ class ClassificationModel(nn.Module):
         return out
 
 
+class MultiTaskClassificationModel(nn.Module):
+    def __init__(self, hyperparams):
+        super().__init__()
+        self.hyperparams = hyperparams
+        self.feature_extractor = FeatureExtractor()
+
+        self.tone_prediction = nn.Sequential(
+            nn.AdaptiveAvgPool2d(1),
+            nn.Flatten(start_dim=1),
+            nn.Linear(512, self.hyperparams["n_tones"]),
+        )
+
+        self.pinyin_prediction = nn.Sequential(
+            nn.AdaptiveAvgPool2d(1),
+            nn.Flatten(start_dim=1),
+            nn.Linear(512, self.hyperparams["n_pinyins"]),
+        )
+
+    def forward(self, x):
+        x = self.feature_extractor(x)
+        tone_out = self.tone_prediction(x)
+        pinyin_out = self.pinyin_prediction(x)
+
+        return tone_out, pinyin_out
+
+
 class SiameseModel(nn.Module):
     def __init__(self, hyperparams):
         super().__init__()
