@@ -1,3 +1,4 @@
+import collections
 import glob
 import json
 
@@ -8,7 +9,7 @@ from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader, Dataset
 
 
-class MyDataset(Dataset):
+class TonePerfectDataset(Dataset):
     def __init__(self, audio_fnames, hyperparams):
         self.audio_fnames = audio_fnames
         self.hyperparams = hyperparams
@@ -77,19 +78,46 @@ class MyDataset(Dataset):
 
 
 def train_test_split_data(hyperparams):
+    dataset = hyperparams["dataset"]
+
     audio_files = glob.glob("tone_perfect/*.mp3")
-    train, test = train_test_split(audio_files, test_size=hyperparams["test_size"], random_state=hyperparams["random_state"])
+    train, test = [], []
+    if dataset == "TONES":
+        train, test = train_test_split(
+            audio_files, test_size=hyperparams["test_size"], random_state=hyperparams["random_state"]
+        )
+    elif dataset == "PINYINS":
+        hash_map = collections.defaultdict(list)
+        for audio_file in audio_files:
+            gt = audio_file.split("/")[-1].split("_")[0][:-1]
+            hash_map[gt].append(audio_file)
+        for key in hash_map:
+            group = hash_map[key]
+            train.extend(group[:-1])
+            test.append(group[-1])
+    elif dataset == "LABELS":
+        hash_map = collections.defaultdict(list)
+        for audio_file in audio_files:
+            gt = audio_file.split("/")[-1].split("_")[0]
+            hash_map[gt].append(audio_file)
+        for key in hash_map:
+            group = hash_map[key]
+            train.extend(group[:-1])
+            test.append(group[-1])
+    else:
+        raise "Invalid Dataset"
+
     return train, test
 
 
 def create_dataloader(hyperparams):
     train_data, test_data = train_test_split_data(hyperparams)
 
-    train_dataset = MyDataset(train_data, hyperparams)
-    test_dataset = MyDataset(test_data, hyperparams)
+    train_dataset = TonePerfectDataset(train_data, hyperparams)
+    test_dataset = TonePerfectDataset(test_data, hyperparams)
 
-    inp, label = train_dataset[0]
-    print("Sample data: ", inp.shape, label, len(train_dataset))
+    print("n train: ", len(train_dataset))
+    print("n test: ", len(test_dataset))
 
     train_dataloader = DataLoader(
         train_dataset,
