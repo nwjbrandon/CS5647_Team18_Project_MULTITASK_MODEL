@@ -29,6 +29,25 @@ class ClassificationTrainer:
         self.scheduler = scheduler
         self.device = device
         self.pretrained_model = hyperparams.get("pretrained_model", "")
+        self.dataset = hyperparams["dataset"]
+
+    def decode_one_hot_encoding(self, out, label):
+        _, predicted = torch.max(out.data, 1)
+        label = label.detach().cpu().numpy().tolist()
+        predicted = predicted.detach().cpu().numpy().tolist()
+        return label, predicted
+
+    def decode_binarized_encoding(self, out, label):
+        label = label.detach().cpu()
+        mask = 2 ** torch.arange(11 - 1, -1, -1)
+        label = torch.sum(mask * label.data, -1).numpy().tolist()
+
+        out[out > 0.5] = 1
+        out[out <= 0.5] = 0
+        out = out.detach().cpu()
+        mask = 2 ** torch.arange(11 - 1, -1, -1)
+        predicted = torch.sum(mask * out.data, -1).numpy().tolist()
+        return label, predicted
 
     def train(self):
         self.model.train()
@@ -44,12 +63,16 @@ class ClassificationTrainer:
             loss.backward()
             self.optimizer.step()
 
-            _, predicted = torch.max(out.data, 1)
-            label = label.detach().cpu().numpy().tolist()
-            y_true.extend(label)
-            predicted = predicted.detach().cpu().numpy().tolist()
-            y_pred.extend(predicted)
-            losses.append(loss.item())
+            if self.dataset == "TONES" or self.dataset == "PINYINS":
+                label, predicted = self.decode_one_hot_encoding(out, label)
+                losses.append(loss.item())
+                y_true.extend(label)
+                y_pred.extend(predicted)
+            else:
+                label, predicted = self.decode_binarized_encoding(out, label)
+                losses.append(loss.item())
+                y_true.extend(label)
+                y_pred.extend(predicted)
 
         y_pred = torch.tensor(y_pred)
         y_true = torch.tensor(y_true)
@@ -69,12 +92,16 @@ class ClassificationTrainer:
                 out = self.model(inp)
                 loss = self.criterion(out, label)
 
-                _, predicted = torch.max(out.data, 1)
-                label = label.detach().cpu().numpy().tolist()
-                y_true.extend(label)
-                predicted = predicted.detach().cpu().numpy().tolist()
-                y_pred.extend(predicted)
+            if self.dataset == "TONES" or self.dataset == "PINYINS":
+                label, predicted = self.decode_one_hot_encoding(out, label)
                 losses.append(loss.item())
+                y_true.extend(label)
+                y_pred.extend(predicted)
+            else:
+                label, predicted = self.decode_binarized_encoding(out, label)
+                losses.append(loss.item())
+                y_true.extend(label)
+                y_pred.extend(predicted)
 
         y_pred = torch.tensor(y_pred)
         y_true = torch.tensor(y_true)

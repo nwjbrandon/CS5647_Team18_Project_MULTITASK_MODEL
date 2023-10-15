@@ -4,7 +4,7 @@ from torch.optim.lr_scheduler import StepLR
 
 from datasets import create_dataloader
 from losses import ClassificationLoss
-from models import Model
+from models import ClassificationModel
 from trainers import ClassificationTrainer
 
 
@@ -21,6 +21,7 @@ def get_hyperparams(mode):
             "random_state": 42,
             "n_mfcc": 128,
             "max_pad": 60,
+            "n_out": 4,
         }
     elif mode == "PINYINS":
         hyperparams = {
@@ -34,6 +35,7 @@ def get_hyperparams(mode):
             "random_state": 42,
             "n_mfcc": 128,
             "max_pad": 60,
+            "n_out": 410,
         }
     elif mode == "LABELS":
         hyperparams = {
@@ -47,6 +49,7 @@ def get_hyperparams(mode):
             "random_state": 42,
             "n_mfcc": 128,
             "max_pad": 60,
+            "n_out": len(bin(1640)) - 2,
         }
     else:
         raise "Invalid Dataset"
@@ -59,7 +62,7 @@ def main():
 
     train_dataloader, test_dataloader = create_dataloader(hyperparams)
 
-    model = Model(hyperparams)
+    model = ClassificationModel(hyperparams)
     device = hyperparams["device"]
     model.to(device)
     print(model)

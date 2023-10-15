@@ -74,7 +74,20 @@ class TonePerfectDataset(Dataset):
         gt = audio_file.split("/")[-1].split("_")[0]
         gt = self.labels.index(gt)
         assert gt != -1
-        return gt
+        return self.binarise_gt(gt)
+
+    def binarise_gt(self, gt):
+        n_classes_bin = bin(self.n_classes)[2:]  # "Ignore prefix 0b"
+        gt_bin = bin(gt)[2:]
+
+        res = [0] * len(n_classes_bin)
+        j = len(n_classes_bin) - 1
+        for i in range(len(gt_bin) - 1, -1, -1):
+            c = gt_bin[i]
+            if c == "1":
+                res[j] = 1
+            j -= 1
+        return torch.tensor(res).float()
 
 
 def train_test_split_data(hyperparams):
