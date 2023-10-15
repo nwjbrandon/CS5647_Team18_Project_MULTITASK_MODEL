@@ -12,7 +12,7 @@ def main():
     hyperparams = {
         "dataset": "TONES",
         "batch_size": 32,
-        "n_classes": 5,
+        "n_classes": 4,
         "learning_rate": 0.03,
         "n_epochs": 30,
         "device": "mps",
@@ -20,7 +20,6 @@ def main():
         "random_state": 42,
         "n_mfcc": 128,
         "max_pad": 60,
-        "n_tones": 4,
     }
     print(hyperparams)
 
@@ -39,7 +38,7 @@ def main():
         verbose=False,
     )
     criterion = ClassificationLoss()
-    metric = torchmetrics.Accuracy(task="multiclass", num_classes=hyperparams["n_tones"])
+    metric = torchmetrics.Accuracy(task="multiclass", num_classes=hyperparams["n_classes"])
 
     trainer = ClassificationTrainer(
         hyperparams,

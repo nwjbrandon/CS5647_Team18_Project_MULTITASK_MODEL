@@ -1,4 +1,5 @@
 import glob
+import json
 
 import librosa
 import numpy as np
@@ -13,6 +14,21 @@ class MyDataset(Dataset):
         self.hyperparams = hyperparams
         self.n_mfcc = hyperparams["n_mfcc"]
         self.max_pad = self.hyperparams["max_pad"]
+        self.dataset = self.hyperparams["dataset"]
+        self.n_classes = self.hyperparams["n_classes"]
+
+        self.tones = []
+        self.pinyins = []
+        self.labels = []
+        self.load_labels()
+
+    def load_labels(self):
+        with open("tones.json") as f:
+            self.tones = json.load(f)
+        with open("pinyins.json") as f:
+            self.pinyins = json.load(f)
+        with open("labels.json") as f:
+            self.labels = json.load(f)
 
     def __len__(self):
         return len(self.audio_fnames)
@@ -20,8 +36,17 @@ class MyDataset(Dataset):
     def __getitem__(self, index):
         audio_fname = self.audio_fnames[index]
         inp = self.preprocess_data(audio_fname)
-        label = self.preprocess_label(audio_fname)
         inp = torch.tensor(inp).unsqueeze(0)
+
+        if self.dataset == "TONES":
+            label = self.get_tone_label(audio_fname)
+        elif self.dataset == "PINYINS":
+            label = self.get_pinyin_label(audio_fname)
+        elif self.dataset == "LABELS":
+            label = self.get_label(audio_fname)
+        else:
+            raise "Invalid Dataset"
+
         return inp, label
 
     def preprocess_data(self, audio_fname):
@@ -31,11 +56,24 @@ class MyDataset(Dataset):
         mfcc = np.pad(mfcc, pad_width=((0, 0), (0, pad_width)), mode="constant")
         return mfcc
 
-    def preprocess_label(self, audio_file):
-        tone = audio_file.split("/")[-1].split("_")[0][-1]
-        tone = int(tone) - 1
-        assert tone <= 3
-        return tone
+    def get_tone_label(self, audio_file):
+        gt = audio_file.split("/")[-1].split("_")[0][-1]
+        gt = int(gt)
+        gt = self.tones.index(gt)
+        assert gt != -1
+        return gt
+
+    def get_pinyin_label(self, audio_file):
+        gt = audio_file.split("/")[-1].split("_")[0][:-1]
+        gt = self.pinyins.index(gt)
+        assert gt != -1
+        return gt
+
+    def get_label(self, audio_file):
+        gt = audio_file.split("/")[-1].split("_")[0]
+        gt = self.labels.index(gt)
+        assert gt != -1
+        return gt
 
 
 def train_test_split_data(hyperparams):
