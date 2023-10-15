@@ -65,7 +65,6 @@ class SiameseModel(nn.Module):
         self.prediction = nn.Sequential(
             nn.Linear(512 * 2, 512),
             nn.BatchNorm1d(512),
-            nn.Dropout(0.2),
             nn.Linear(512, self.hyperparams["n_out"]),
         )
 
