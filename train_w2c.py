@@ -4,7 +4,7 @@ from torch.optim.lr_scheduler import StepLR
 
 from datasets import create_dataloaders
 from losses import MultiTaskClassificationLoss
-from models import MultiTaskClassificationModel
+from models import W2VModel
 from trainers import MultiTaskClassificationTrainer
 
 
@@ -14,7 +14,7 @@ def main():
         "batch_size": 32,
         "learning_rate": 0.003,
         "n_epochs": 30,
-        "device": "mps",
+        "device": "cpu",
         "test_size": 0.2,
         "random_state": 42,
         "preprocess_type": "mfcc",
@@ -30,7 +30,7 @@ def main():
 
     train_dataloader, test_dataloader = create_dataloaders(hyperparams, mode="MULTITASK")
 
-    model = MultiTaskClassificationModel(hyperparams)
+    model = W2VModel(hyperparams)
     device = hyperparams["device"]
     model.to(device)
     print(model)

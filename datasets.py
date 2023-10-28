@@ -5,8 +5,10 @@ import json
 import librosa
 import numpy as np
 import torch
+import torch.nn.functional as F
 from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader, Dataset
+from transformers import AutoFeatureExtractor
 
 
 class TonePerfectDataset(Dataset):
@@ -14,9 +16,14 @@ class TonePerfectDataset(Dataset):
         super().__init__()
         self.audio_fnames = audio_fnames
         self.hyperparams = hyperparams
+        self.sampling_rate = hyperparams["sampling_rate"]
         self.n_mfcc = hyperparams["n_mfcc"]
         self.max_pad = self.hyperparams["max_pad"]
         self.dataset = self.hyperparams["dataset"]
+        self.max_length = self.hyperparams["max_length"]
+        self.preprocess_type = self.hyperparams["preprocess_type"]
+
+        self.w2v = AutoFeatureExtractor.from_pretrained("facebook/wav2vec2-base")
 
         self.tones = []
         self.pinyins = []
@@ -36,8 +43,7 @@ class TonePerfectDataset(Dataset):
 
     def __getitem__(self, index):
         audio_fname = self.audio_fnames[index]
-        inp = self.preprocess_data(audio_fname)
-        inp = torch.tensor(inp).unsqueeze(0)
+        inp = self.load_inp(audio_fname)
 
         if self.dataset == "TONES":
             label = self.get_tone_label(audio_fname)
@@ -50,12 +56,39 @@ class TonePerfectDataset(Dataset):
 
         return inp, label
 
-    def preprocess_data(self, audio_fname):
+    def load_inp(self, audio_fname):
+        if self.preprocess_type == "mfcc":
+            inp = self.load_mfcc(audio_fname)
+        elif self.preprocess_type == "melspectrogram":
+            inp = self.load_mfcc(audio_fname)
+        elif self.preprocess_type == "raw":
+            inp = self.load_waveform(audio_fname)
+        else:
+            raise "Invalid Dataset"
+        return inp
+
+    def load_mfcc(self, audio_fname):
         audio, sample_rate = librosa.core.load(audio_fname)
         mfcc = librosa.feature.mfcc(y=audio, sr=sample_rate, n_mfcc=self.n_mfcc)
         pad_width = self.max_pad - mfcc.shape[1]
         mfcc = np.pad(mfcc, pad_width=((0, 0), (0, pad_width)), mode="constant")
+        mfcc = torch.tensor(mfcc).unsqueeze(0)
         return mfcc
+
+    def load_waveform(self, audio_fname):
+        audio, sample_rate = librosa.core.load(audio_fname, sr=self.w2v.sampling_rate)
+        waveform = self.w2v(
+            audio,
+            sampling_rate=self.w2v.sampling_rate,
+            max_length=self.max_length,
+            truncation=True,
+            return_tensors="pt",
+            padding=True,
+        )
+        waveform = waveform["input_values"].squeeze(0)
+        n_pad = self.max_length - len(waveform)
+        waveform = F.pad(waveform, (0, n_pad), "constant", 0)
+        return waveform
 
     def get_tone_label(self, audio_file):
         gt = audio_file.split("/")[-1].split("_")[0][-1]
@@ -152,8 +185,7 @@ class TonePerfectMultiTaskDataset(TonePerfectDataset):
 
     def __getitem__(self, index):
         audio_fname = self.audio_fnames[index]
-        inp = self.preprocess_data(audio_fname)
-        inp = torch.tensor(inp).unsqueeze(0)
+        inp = self.load_inp(audio_fname)
 
         tone = self.get_tone_label(audio_fname)
         pinyin = self.get_pinyin_label(audio_fname)

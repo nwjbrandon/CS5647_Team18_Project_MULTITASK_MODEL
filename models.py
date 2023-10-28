@@ -1,4 +1,5 @@
 import torch.nn as nn
+from transformers import AutoModelForAudioClassification
 
 
 class FeatureExtractor(nn.Module):
@@ -66,6 +67,35 @@ class MultiTaskClassificationModel(nn.Module):
 
     def forward(self, x):
         x = self.feature_extractor(x)
+        tone_out = self.tone_prediction(x)
+        pinyin_out = self.pinyin_prediction(x)
+
+        return tone_out, pinyin_out
+
+
+class W2VModel(nn.Module):
+    def __init__(self, hyperparams):
+        super().__init__()
+        self.hyperparams = hyperparams
+        pretrained_model = AutoModelForAudioClassification.from_pretrained("facebook/wav2vec2-base")
+        self.feature_extractor = nn.Sequential(*list(pretrained_model.children())[:-2])
+
+        self.tone_prediction = nn.Sequential(
+            nn.AdaptiveAvgPool1d(1),
+            nn.Flatten(start_dim=1),
+            nn.Linear(768, self.hyperparams["n_tones"]),
+        )
+
+        self.pinyin_prediction = nn.Sequential(
+            nn.AdaptiveAvgPool1d(1),
+            nn.Flatten(start_dim=1),
+            nn.Linear(768, self.hyperparams["n_pinyins"]),
+        )
+
+    def forward(self, x):
+        x = self.feature_extractor(x).last_hidden_state
+        x = x.permute(0, 2, 1)
+
         tone_out = self.tone_prediction(x)
         pinyin_out = self.pinyin_prediction(x)
 
