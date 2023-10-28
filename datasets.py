@@ -89,9 +89,11 @@ def train_test_split_pinyins_data(audio_files, hyperparams):
         gt = audio_file.split("/")[-1].split("_")[0][:-1]
         hash_map[gt].append(audio_file)
     for key in hash_map:
-        group = hash_map[key]
-        train.extend(group[:-1])
-        test.append(group[-1])
+        for audio_file in hash_map[key]:
+            if "MV3" in audio_file or "FV3" in audio_file:
+                test.append(audio_file)
+            else:
+                train.extend(audio_file)
     return train, test
 
 
@@ -103,8 +105,8 @@ def train_test_split_tones_pinyins_data(audio_files, hyperparams):
         hash_map[gt].append(audio_file)
     for key in hash_map:
         group = hash_map[key]
-        train.extend(group[:-1])
-        test.append(group[-1])
+        train.extend(group[:-2])
+        test.append(group[-2:])
     return train, test
 
 
