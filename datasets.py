@@ -92,9 +92,10 @@ class TonePerfectDataset(Dataset):
 
         audio, sample_rate = librosa.core.load(audio_fname)
         f0, voiced_flag, voiced_probs = librosa.pyin(
-            audio, sr=sample_rate, fmin=librosa.note_to_hz("C2"), fmax=librosa.note_to_hz("C7")
+            audio, sr=sample_rate, fmin=librosa.note_to_hz("C2"), fmax=librosa.note_to_hz("C7"), fill_na=0
         )
         pad_width = self.max_pad - f0.shape[0]
+        f0 = f0 / librosa.note_to_hz("C7")
         f0 = np.pad(f0, pad_width=(0, pad_width), mode="constant")
         f0 = torch.tensor(f0)
         self.f0_dict[audio_fname] = f0
