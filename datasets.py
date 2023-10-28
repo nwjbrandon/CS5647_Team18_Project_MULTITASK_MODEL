@@ -6,6 +6,7 @@ import librosa
 import numpy as np
 import torch
 import torch.nn.functional as F
+from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader, Dataset
 from transformers import AutoFeatureExtractor
 
@@ -118,6 +119,11 @@ class TonePerfectDataset(Dataset):
         return gt
 
 
+def train_test_split_default(audio_files, hyperparams):
+    train, test = train_test_split(audio_files, test_size=hyperparams["test_size"], random_state=hyperparams["random_state"])
+    return train, test
+
+
 def train_test_split_by_tones(audio_files, hyperparams):
     train, test = [], []
     hash_map = collections.defaultdict(list)
@@ -166,10 +172,10 @@ def train_test_split_by_labels(audio_files, hyperparams):
 def train_test_split_data(hyperparams):
     dataset = hyperparams["dataset"]
     train_test_split_data_map = {
-        "TONES": train_test_split_by_tones,
-        "PINYINS": train_test_split_by_pinyins,
+        "TONES": train_test_split_default,
+        "PINYINS": train_test_split_default,
         "LABELS": train_test_split_by_labels,
-        "MULTITASK": train_test_split_by_pinyins,
+        "MULTITASK": train_test_split_default,
     }
 
     audio_files = glob.glob("tone_perfect/*.mp3")
@@ -215,7 +221,7 @@ class TonePerfectMultiTaskDataset(TonePerfectDataset):
 
 def create_dataloader_tone_perfect_multitask(hyperparams):
     audio_files = glob.glob("tone_perfect/*.mp3")
-    train_data, test_data = train_test_split_by_pinyins(audio_files, hyperparams)
+    train_data, test_data = train_test_split_default(audio_files, hyperparams)
 
     train_dataset = TonePerfectMultiTaskDataset(train_data, hyperparams)
     test_dataset = TonePerfectMultiTaskDataset(test_data, hyperparams)
