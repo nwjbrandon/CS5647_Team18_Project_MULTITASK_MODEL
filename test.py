@@ -3,7 +3,8 @@ from transformers import AutoFeatureExtractor
 import torch.nn as nn
 import torchaudio
 import librosa
-
+import numpy as np
+import matplotlib.pyplot as plt
 labels = [1, 2, 3, 4]
 label2id, id2label = dict(), dict()
 for i, label in enumerate(labels):
@@ -11,7 +12,12 @@ for i, label in enumerate(labels):
     id2label[str(i)] = label
 num_labels = len(id2label)
 
-
+audio, sample_rate = librosa.core.load("tone_perfect/a1_FV1_MP3.mp3")
+mfcc = librosa.feature.mfcc(y=audio, sr=sample_rate, n_mfcc=128)
+pad_width = 60 - mfcc.shape[1]
+mfcc = np.pad(mfcc, pad_width=((0, 0), (0, pad_width)), mode="constant")
+plt.imshow(mfcc)
+plt.show()
 
 audio, sample_rate = librosa.core.load("tone_perfect/a1_FV1_MP3.mp3")
 feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/wav2vec2-base")
