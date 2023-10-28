@@ -38,7 +38,7 @@ class ClassificationModel(nn.Module):
         self.prediction = nn.Sequential(
             nn.AdaptiveAvgPool2d(1),
             nn.Flatten(start_dim=1),
-            nn.Linear(512, self.hyperparams["n_out"]),
+            nn.Linear(512, self.hyperparams["n_classes"]),
         )
 
     def forward(self, x):
