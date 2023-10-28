@@ -12,7 +12,6 @@ def main():
     hyperparams = {
         "dataset": "MULTITASK",
         "batch_size": 32,
-        "n_classes": 2,
         "learning_rate": 0.003,
         "n_epochs": 30,
         "device": "mps",

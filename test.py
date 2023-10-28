@@ -1,10 +1,9 @@
-from transformers import AutoModelForAudioClassification
-from transformers import AutoFeatureExtractor
-import torch.nn as nn
-import torchaudio
 import librosa
-import numpy as np
 import matplotlib.pyplot as plt
+import numpy as np
+import torch.nn as nn
+from transformers import AutoFeatureExtractor, AutoModelForAudioClassification
+
 labels = [1, 2, 3, 4]
 label2id, id2label = dict(), dict()
 for i, label in enumerate(labels):
@@ -35,12 +34,11 @@ class Model(nn.Module):
         )
         pretrained_model.gradient_checkpointing_enable()
 
-        self.feature_extractor = nn.Sequential(
-            *list(pretrained_model.children())[:-2]
-        )
+        self.feature_extractor = nn.Sequential(*list(pretrained_model.children())[:-2])
         self.pooling = nn.AdaptiveAvgPool1d(1)
         self.flatten = nn.Flatten(start_dim=1)
         self.net = nn.Linear(768, 4)
+
     def forward(self, x):
         x = self.feature_extractor(x).last_hidden_state
         x = x.permute(0, 2, 1)
