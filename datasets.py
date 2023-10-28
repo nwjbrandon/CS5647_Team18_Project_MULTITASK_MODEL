@@ -84,6 +84,16 @@ class TonePerfectDataset(Dataset):
         melspectrogram = torch.tensor(melspectrogram).unsqueeze(0)
         return melspectrogram
 
+    def load_pyin(self, audio_fname):
+        audio, sample_rate = librosa.core.load(audio_fname)
+        f0, voiced_flag, voiced_probs = librosa.pyin(
+            audio, sr=sample_rate, fmin=librosa.note_to_hz("C2"), fmax=librosa.note_to_hz("C7")
+        )
+        pad_width = self.max_pad - f0.shape[0]
+        f0 = np.pad(f0, pad_width=(0, pad_width), mode="constant")
+        f0 = torch.tensor(f0)
+        return f0
+
     def load_waveform(self, audio_fname):
         audio, sample_rate = librosa.core.load(audio_fname, sr=self.w2v.sampling_rate)
         waveform = self.w2v(
@@ -242,8 +252,48 @@ def create_dataloader_tone_perfect_multitask(hyperparams):
     return train_dataloader, test_dataloader
 
 
+class TonePerfectMultiTaskPYINDataset(TonePerfectDataset):
+    def __init__(self, audio_fnames, hyperparams):
+        super().__init__(audio_fnames, hyperparams)
+
+    def __getitem__(self, index):
+        audio_fname = self.audio_fnames[index]
+        inp_mfcc = self.load_inp(audio_fname)
+        inp_f0 = self.load_pyin(audio_fname)
+
+        tone = self.get_tone_label(audio_fname)
+        pinyin = self.get_pinyin_label(audio_fname)
+
+        return inp_mfcc, inp_f0, tone, pinyin
+
+
+def create_dataloader_tone_perfect_multitask_pyin(hyperparams):
+    audio_files = glob.glob("tone_perfect/*.mp3")
+    train_data, test_data = train_test_split_default(audio_files, hyperparams)
+
+    train_dataset = TonePerfectMultiTaskPYINDataset(train_data, hyperparams)
+    test_dataset = TonePerfectMultiTaskPYINDataset(test_data, hyperparams)
+
+    print("n train: ", len(train_dataset))
+    print("n test: ", len(test_dataset))
+
+    train_dataloader = DataLoader(
+        train_dataset,
+        batch_size=hyperparams["batch_size"],
+        shuffle=True,
+    )
+    test_dataloader = DataLoader(
+        test_dataset,
+        batch_size=hyperparams["batch_size"],
+        shuffle=True,
+    )
+    return train_dataloader, test_dataloader
+
+
 def create_dataloaders(hyperparams, mode=None):
     if mode == "MULTITASK":
         return create_dataloader_tone_perfect_multitask(hyperparams)
+    elif mode == "MULTITASK_PYIN":
+        return create_dataloader_tone_perfect_multitask_pyin(hyperparams)
     else:
         return create_dataloader_tone_perfect(hyperparams)

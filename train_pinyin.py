@@ -4,13 +4,13 @@ from torch.optim.lr_scheduler import StepLR
 
 from datasets import create_dataloaders
 from losses import MultiTaskClassificationLoss
-from models import MultiTaskClassificationModel
-from trainers import MultiTaskClassificationTrainer
+from models import MultiTaskPYINClassificationModel
+from trainers import MultiTaskPYINClassificationTrainer
 
 
 def main():
     hyperparams = {
-        "dataset": "MULTITASK",
+        "dataset": "MULTITASK_PYIN",
         "batch_size": 32,
         "learning_rate": 0.003,
         "n_epochs": 30,
@@ -28,9 +28,9 @@ def main():
     }
     print(hyperparams)
 
-    train_dataloader, test_dataloader = create_dataloaders(hyperparams, mode="MULTITASK")
+    train_dataloader, test_dataloader = create_dataloaders(hyperparams, mode="MULTITASK_PYIN")
 
-    model = MultiTaskClassificationModel(hyperparams)
+    model = MultiTaskPYINClassificationModel(hyperparams)
     device = hyperparams["device"]
     model.to(device)
     print(model)
@@ -46,7 +46,7 @@ def main():
     tone_metric = torchmetrics.Accuracy(task="multiclass", num_classes=hyperparams["n_tones"])
     pinyin_metric = torchmetrics.Accuracy(task="multiclass", num_classes=hyperparams["n_pinyins"])
 
-    trainer = MultiTaskClassificationTrainer(
+    trainer = MultiTaskPYINClassificationTrainer(
         hyperparams,
         model,
         train_dataloader,

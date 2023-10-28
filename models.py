@@ -1,3 +1,4 @@
+import torch
 import torch.nn as nn
 from transformers import AutoModelForAudioClassification
 
@@ -97,6 +98,37 @@ class MultiTaskClassificationModel(nn.Module):
 
     def forward(self, x):
         x = self.feature_extractor(x)
+        tone_out = self.tone_prediction(x)
+        pinyin_out = self.pinyin_prediction(x)
+
+        return tone_out, pinyin_out
+
+
+class MultiTaskPYINClassificationModel(nn.Module):
+    def __init__(self, hyperparams):
+        super().__init__()
+        self.hyperparams = hyperparams
+        self.feature_extractor = FeatureExtractor()
+
+        self.fuse = nn.Sequential(
+            nn.Linear(512 + 60, 512),
+            nn.Sigmoid(),
+        )
+
+        self.tone_prediction = nn.Sequential(
+            nn.Linear(512, self.hyperparams["n_tones"]),
+        )
+
+        self.pinyin_prediction = nn.Sequential(
+            nn.Linear(512, self.hyperparams["n_pinyins"]),
+        )
+
+    def forward(self, x_mfcc, x_f0):
+        x_mfcc = self.feature_extractor(x_mfcc)
+        x = torch.concatenate([x_mfcc, x_f0], dim=1)
+
+        x = self.fuse(x)
+
         tone_out = self.tone_prediction(x)
         pinyin_out = self.pinyin_prediction(x)
 
