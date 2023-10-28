@@ -6,7 +6,6 @@ import librosa
 import numpy as np
 import torch
 import torch.nn.functional as F
-from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader, Dataset
 from transformers import AutoFeatureExtractor
 
@@ -127,10 +126,10 @@ def train_test_split_by_tones(audio_files, hyperparams):
         hash_map[gt].append(audio_file)
     for key in hash_map:
         for audio_file in hash_map[key]:
-            if "MV3" in audio_file or "FV3" in audio_file:
+            if "FV3" in audio_file:
                 test.append(audio_file)
             else:
-                train.extend(audio_file)
+                train.append(audio_file)
     return train, test
 
 
@@ -142,10 +141,10 @@ def train_test_split_by_pinyins(audio_files, hyperparams):
         hash_map[gt].append(audio_file)
     for key in hash_map:
         for audio_file in hash_map[key]:
-            if "MV3" in audio_file or "FV3" in audio_file:
+            if "FV3" in audio_file:
                 test.append(audio_file)
             else:
-                train.extend(audio_file)
+                train.append(audio_file)
     return train, test
 
 
@@ -157,10 +156,10 @@ def train_test_split_by_labels(audio_files, hyperparams):
         hash_map[gt].append(audio_file)
     for key in hash_map:
         for audio_file in hash_map[key]:
-            if "MV3" in audio_file or "FV3" in audio_file:
+            if "FV3" in audio_file:
                 test.append(audio_file)
             else:
-                train.extend(audio_file)
+                train.append(audio_file)
     return train, test
 
 
@@ -216,9 +215,7 @@ class TonePerfectMultiTaskDataset(TonePerfectDataset):
 
 def create_dataloader_tone_perfect_multitask(hyperparams):
     audio_files = glob.glob("tone_perfect/*.mp3")
-    train_data, test_data = train_test_split(
-        audio_files, test_size=hyperparams["test_size"], random_state=hyperparams["random_state"]
-    )
+    train_data, test_data = train_test_split_by_pinyins(audio_files, hyperparams)
 
     train_dataset = TonePerfectMultiTaskDataset(train_data, hyperparams)
     test_dataset = TonePerfectMultiTaskDataset(test_data, hyperparams)
