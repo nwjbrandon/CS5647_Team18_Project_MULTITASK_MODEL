@@ -14,7 +14,7 @@ def main():
         "batch_size": 32,
         "learning_rate": 0.003,
         "n_epochs": 30,
-        "device": "cpu",
+        "device": "cuda",
         "test_size": 0.2,
         "random_state": 42,
         "preprocess_type": "mfcc",
