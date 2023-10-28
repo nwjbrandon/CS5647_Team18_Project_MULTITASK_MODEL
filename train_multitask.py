@@ -19,7 +19,7 @@ def main():
         "random_state": 42,
         "preprocess_type": "mfcc",
         "n_mfcc": 128,
-        "n_mel": 128,
+        "n_mels": 128,
         "sampling_rate": 16000,
         "max_length": 16000,
         "max_pad": 60,
