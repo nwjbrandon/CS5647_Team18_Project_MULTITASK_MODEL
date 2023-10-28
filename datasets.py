@@ -119,12 +119,22 @@ class TonePerfectDataset(Dataset):
         return gt
 
 
-def train_test_split_tones_data(audio_files, hyperparams):
-    train, test = train_test_split(audio_files, test_size=hyperparams["test_size"], random_state=hyperparams["random_state"])
+def train_test_split_by_tones(audio_files, hyperparams):
+    train, test = [], []
+    hash_map = collections.defaultdict(list)
+    for audio_file in audio_files:
+        gt = audio_file.split("/")[-1].split("_")[0][-1]
+        hash_map[gt].append(audio_file)
+    for key in hash_map:
+        for audio_file in hash_map[key]:
+            if "MV3" in audio_file or "FV3" in audio_file:
+                test.append(audio_file)
+            else:
+                train.extend(audio_file)
     return train, test
 
 
-def train_test_split_pinyins_data(audio_files, hyperparams):
+def train_test_split_by_pinyins(audio_files, hyperparams):
     train, test = [], []
     hash_map = collections.defaultdict(list)
     for audio_file in audio_files:
@@ -139,26 +149,28 @@ def train_test_split_pinyins_data(audio_files, hyperparams):
     return train, test
 
 
-def train_test_split_tones_pinyins_data(audio_files, hyperparams):
+def train_test_split_by_labels(audio_files, hyperparams):
     train, test = [], []
     hash_map = collections.defaultdict(list)
     for audio_file in audio_files:
         gt = audio_file.split("/")[-1].split("_")[0]
         hash_map[gt].append(audio_file)
     for key in hash_map:
-        group = hash_map[key]
-        train.extend(group[:-2])
-        test.append(group[-2:])
+        for audio_file in hash_map[key]:
+            if "MV3" in audio_file or "FV3" in audio_file:
+                test.append(audio_file)
+            else:
+                train.extend(audio_file)
     return train, test
 
 
 def train_test_split_data(hyperparams):
     dataset = hyperparams["dataset"]
     train_test_split_data_map = {
-        "TONES": train_test_split_tones_data,
-        "PINYINS": train_test_split_tones_pinyins_data,
-        "LABELS": train_test_split_tones_pinyins_data,
-        "MULTITASK": train_test_split_tones_pinyins_data,
+        "TONES": train_test_split_by_tones,
+        "PINYINS": train_test_split_by_pinyins,
+        "LABELS": train_test_split_by_labels,
+        "MULTITASK": train_test_split_by_pinyins,
     }
 
     audio_files = glob.glob("tone_perfect/*.mp3")
