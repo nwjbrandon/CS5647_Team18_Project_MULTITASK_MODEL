@@ -2,6 +2,40 @@ import torch.nn as nn
 from transformers import AutoModelForAudioClassification
 
 
+class BasicBlock(nn.Module):
+    def __init__(self, in_channels, out_channels, is_downsample=False):
+        super().__init__()
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.is_downsample = is_downsample
+        self.net = nn.Sequential(
+            nn.Conv2d(in_channels, in_channels, kernel_size=3, padding=1, bias=False),
+            nn.BatchNorm2d(in_channels),
+            nn.ReLU(),
+            nn.Conv2d(in_channels, in_channels, kernel_size=3, padding=1, bias=False),
+            nn.BatchNorm2d(in_channels),
+        )
+
+        if self.is_downsample:
+            self.downsample = nn.Sequential(
+                nn.Conv2d(
+                    in_channels,
+                    out_channels,
+                    kernel_size=1,
+                    padding=0,
+                    stride=2,
+                    bias=False,
+                ),
+                nn.BatchNorm2d(out_channels),
+            )
+
+    def forward(self, x):
+        x = self.net(x) + x
+        if self.is_downsample:
+            x = self.downsample(x)
+        return x
+
+
 class FeatureExtractor(nn.Module):
     def __init__(self):
         super().__init__()
@@ -22,6 +56,8 @@ class FeatureExtractor(nn.Module):
             nn.ReLU(),
             nn.BatchNorm2d(512),
             nn.MaxPool2d(2),
+            nn.AdaptiveAvgPool2d(1),
+            nn.Flatten(start_dim=1),
         )
 
     def forward(self, x):
@@ -36,8 +72,6 @@ class ClassificationModel(nn.Module):
         self.feature_extractor = FeatureExtractor()
 
         self.prediction = nn.Sequential(
-            nn.AdaptiveAvgPool2d(1),
-            nn.Flatten(start_dim=1),
             nn.Linear(512, self.hyperparams["n_classes"]),
         )
 
@@ -54,14 +88,10 @@ class MultiTaskClassificationModel(nn.Module):
         self.feature_extractor = FeatureExtractor()
 
         self.tone_prediction = nn.Sequential(
-            nn.AdaptiveAvgPool2d(1),
-            nn.Flatten(start_dim=1),
             nn.Linear(512, self.hyperparams["n_tones"]),
         )
 
         self.pinyin_prediction = nn.Sequential(
-            nn.AdaptiveAvgPool2d(1),
-            nn.Flatten(start_dim=1),
             nn.Linear(512, self.hyperparams["n_pinyins"]),
         )
 
