@@ -17,7 +17,7 @@ def main():
         "device": "mps",
         "test_size": 0.2,
         "random_state": 42,
-        "preprocess_type": "mfcc2",
+        "preprocess_type": "raw",
         "n_mfcc": 128,
         "n_mels": 128,
         "sampling_rate": 16000,

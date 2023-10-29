@@ -58,8 +58,6 @@ class TonePerfectDataset(Dataset):
     def load_inp(self, audio_fname):
         if self.preprocess_type == "mfcc":
             inp = self.load_mfcc(audio_fname)
-        elif self.preprocess_type == "mfcc2":
-            inp = self.load_mfcc2(audio_fname)
         elif self.preprocess_type == "melspectrogram":
             inp = self.load_melspectrogram(audio_fname)
         elif self.preprocess_type == "raw":
@@ -74,14 +72,6 @@ class TonePerfectDataset(Dataset):
         pad_width = self.max_pad - mfcc.shape[1]
         mfcc = np.pad(mfcc, pad_width=((0, 0), (0, pad_width)), mode="constant")
         mfcc = torch.tensor(mfcc).unsqueeze(0)
-        return mfcc
-
-    def load_mfcc2(self, audio_fname):
-        audio, sample_rate = librosa.core.load(audio_fname)
-        mfcc = librosa.feature.mfcc(y=audio, sr=sample_rate, n_mfcc=self.n_mfcc)
-        pad_width = self.max_pad - mfcc.shape[1]
-        mfcc = np.pad(mfcc, pad_width=((0, 0), (0, pad_width)), mode="constant")
-        mfcc = torch.tensor(mfcc)
         return mfcc
 
     def load_melspectrogram(self, audio_fname):
@@ -106,7 +96,8 @@ class TonePerfectDataset(Dataset):
         return f0
 
     def load_waveform(self, audio_fname):
-        waveform, _ = librosa.core.load(audio_fname, sr=16000)
+        waveform, _ = librosa.core.load(audio_fname)
+        waveform = librosa.util.normalize(waveform)
         waveform = waveform[: self.max_length]
 
         pad_width = self.max_length - waveform.shape[0]

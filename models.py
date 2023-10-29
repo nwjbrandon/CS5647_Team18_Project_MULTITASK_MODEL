@@ -139,18 +139,22 @@ class Wav2LetterFeatureExtractor(nn.Module):
         super().__init__()
         self.hyperparams = hyperparams
         self.net = nn.Sequential(
-            nn.Conv1d(128, 256, kernel_size=7, padding=1, bias=False),
-            nn.BatchNorm1d(256),
-            nn.MaxPool1d(2),
-            nn.Conv1d(256, 256, kernel_size=7, padding=1, bias=False),
-            nn.BatchNorm1d(256),
-            nn.MaxPool1d(2),
-            nn.Conv1d(256, 512, kernel_size=7, padding=1, bias=False),
-            nn.BatchNorm1d(512),
-            nn.MaxPool1d(2),
-            nn.Conv1d(512, 512, kernel_size=3, padding=1, bias=False),
-            nn.BatchNorm1d(512),
-            nn.MaxPool1d(2),
+            nn.Conv1d(1, 32, 80, stride=16),
+            nn.BatchNorm1d(32),
+            nn.ReLU(),
+            nn.MaxPool1d(4),
+            nn.Conv1d(32, 32, 3),
+            nn.BatchNorm1d(32),
+            nn.ReLU(),
+            nn.MaxPool1d(4),
+            nn.Conv1d(32, 64, 3),
+            nn.BatchNorm1d(64),
+            nn.ReLU(),
+            nn.MaxPool1d(4),
+            nn.Conv1d(64, 64, 3),
+            nn.BatchNorm1d(64),
+            nn.ReLU(),
+            nn.MaxPool1d(4),
             nn.AdaptiveAvgPool1d(1),
             nn.Flatten(start_dim=1),
         )
@@ -167,11 +171,11 @@ class Wav2LetterModel(nn.Module):
         self.feature_extractor = Wav2LetterFeatureExtractor(hyperparams)
 
         self.tone_prediction = nn.Sequential(
-            nn.Linear(512, self.hyperparams["n_tones"]),
+            nn.Linear(64, self.hyperparams["n_tones"]),
         )
 
         self.pinyin_prediction = nn.Sequential(
-            nn.Linear(512, self.hyperparams["n_pinyins"]),
+            nn.Linear(64, self.hyperparams["n_pinyins"]),
         )
 
     def forward(self, x):
