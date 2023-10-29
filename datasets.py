@@ -26,7 +26,7 @@ class TonePerfectDataset(Dataset):
 
         self.w2v = AutoFeatureExtractor.from_pretrained("facebook/wav2vec2-base")
 
-        self.f0_dict = dict()
+        self.cache = dict()
 
         self.tones = []
         self.pinyins = []
@@ -87,8 +87,8 @@ class TonePerfectDataset(Dataset):
         return melspectrogram
 
     def load_pyin(self, audio_fname):
-        if audio_fname in self.f0_dict:
-            return self.f0_dict[audio_fname]
+        if audio_fname in self.cache:
+            return self.cache[audio_fname]
 
         audio, sample_rate = librosa.core.load(audio_fname)
         f0, voiced_flag, voiced_probs = librosa.pyin(
@@ -98,10 +98,13 @@ class TonePerfectDataset(Dataset):
         f0 = f0 / librosa.note_to_hz("C7")
         f0 = np.pad(f0, pad_width=(0, pad_width), mode="constant")
         f0 = torch.tensor(f0)
-        self.f0_dict[audio_fname] = f0
+        self.cache[audio_fname] = f0
         return f0
 
     def load_waveform(self, audio_fname):
+        if audio_fname in self.cache:
+            return self.cache[audio_fname]
+
         audio, sample_rate = librosa.core.load(audio_fname, sr=self.w2v.sampling_rate)
         waveform = self.w2v(
             audio,
@@ -114,6 +117,7 @@ class TonePerfectDataset(Dataset):
         waveform = waveform["input_values"].squeeze(0)
         n_pad = self.max_length - len(waveform)
         waveform = F.pad(waveform, (0, n_pad), "constant", 0)
+        self.cache[audio_fname] = waveform
         return waveform
 
     def get_tone_label(self, audio_file):
