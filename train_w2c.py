@@ -4,7 +4,7 @@ from torch.optim.lr_scheduler import StepLR
 
 from datasets import create_dataloaders
 from losses import MultiTaskClassificationLoss
-from models import W2VModel
+from models import Wav2LetterModel
 from trainers import MultiTaskClassificationTrainer
 
 
@@ -14,10 +14,10 @@ def main():
         "batch_size": 32,
         "learning_rate": 0.003,
         "n_epochs": 30,
-        "device": "cuda",
+        "device": "mps",
         "test_size": 0.2,
         "random_state": 42,
-        "preprocess_type": "raw",
+        "preprocess_type": "mfcc2",
         "n_mfcc": 128,
         "n_mels": 128,
         "sampling_rate": 16000,
@@ -30,7 +30,7 @@ def main():
 
     train_dataloader, test_dataloader = create_dataloaders(hyperparams, mode="MULTITASK")
 
-    model = W2VModel(hyperparams)
+    model = Wav2LetterModel(hyperparams)
     device = hyperparams["device"]
     model.to(device)
     print(model)

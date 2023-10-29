@@ -1,6 +1,5 @@
 import torch
 import torch.nn as nn
-from transformers import AutoModelForAudioClassification
 
 
 class BasicBlock(nn.Module):
@@ -135,39 +134,44 @@ class MultiTaskPYINClassificationModel(nn.Module):
         return tone_out, pinyin_out
 
 
-class W2VFE(nn.Module):
+class Wav2LetterFeatureExtractor(nn.Module):
     def __init__(self, hyperparams):
         super().__init__()
         self.hyperparams = hyperparams
-        pretrained_model = AutoModelForAudioClassification.from_pretrained("facebook/wav2vec2-base")
-        self.feature_extractor = nn.Sequential(
-            *list(pretrained_model.children())[:-2],
-        )
-
-        self.flat = nn.Sequential(
+        self.net = nn.Sequential(
+            nn.Conv1d(128, 256, kernel_size=7, padding=1, bias=False),
+            nn.BatchNorm1d(256),
+            nn.MaxPool1d(2),
+            nn.Conv1d(256, 256, kernel_size=7, padding=1, bias=False),
+            nn.BatchNorm1d(256),
+            nn.MaxPool1d(2),
+            nn.Conv1d(256, 512, kernel_size=7, padding=1, bias=False),
+            nn.BatchNorm1d(512),
+            nn.MaxPool1d(2),
+            nn.Conv1d(512, 512, kernel_size=3, padding=1, bias=False),
+            nn.BatchNorm1d(512),
+            nn.MaxPool1d(2),
             nn.AdaptiveAvgPool1d(1),
             nn.Flatten(start_dim=1),
         )
 
     def forward(self, x):
-        x = self.feature_extractor(x).last_hidden_state
-        x = x.permute(0, 2, 1)
-        x = self.flat(x)
+        x = self.net(x)
         return x
 
 
-class W2VModel(nn.Module):
+class Wav2LetterModel(nn.Module):
     def __init__(self, hyperparams):
         super().__init__()
         self.hyperparams = hyperparams
-        self.feature_extractor = W2VFE(hyperparams)
+        self.feature_extractor = Wav2LetterFeatureExtractor(hyperparams)
 
         self.tone_prediction = nn.Sequential(
-            nn.Linear(768, self.hyperparams["n_tones"]),
+            nn.Linear(512, self.hyperparams["n_tones"]),
         )
 
         self.pinyin_prediction = nn.Sequential(
-            nn.Linear(768, self.hyperparams["n_pinyins"]),
+            nn.Linear(512, self.hyperparams["n_pinyins"]),
         )
 
     def forward(self, x):
