@@ -134,6 +134,7 @@ class MultiTaskPYINClassificationModel(nn.Module):
 
         return tone_out, pinyin_out
 
+
 class W2VFE(nn.Module):
     def __init__(self, hyperparams):
         super().__init__()
@@ -147,7 +148,7 @@ class W2VFE(nn.Module):
             nn.AdaptiveAvgPool1d(1),
             nn.Flatten(start_dim=1),
         )
-    
+
     def forward(self, x):
         x = self.feature_extractor(x).last_hidden_state
         x = x.permute(0, 2, 1)
