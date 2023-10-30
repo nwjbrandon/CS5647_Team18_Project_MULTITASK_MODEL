@@ -5,10 +5,8 @@ import json
 import librosa
 import numpy as np
 import torch
-import torch.nn.functional as F
 from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader, Dataset
-from transformers import AutoFeatureExtractor
 
 
 class TonePerfectDataset(Dataset):
@@ -24,9 +22,7 @@ class TonePerfectDataset(Dataset):
         self.max_length = self.hyperparams["max_length"]
         self.preprocess_type = self.hyperparams["preprocess_type"]
 
-        self.w2v = AutoFeatureExtractor.from_pretrained("facebook/wav2vec2-base")
-
-        self.f0_dict = dict()
+        self.cache = dict()
 
         self.tones = []
         self.pinyins = []
@@ -87,33 +83,27 @@ class TonePerfectDataset(Dataset):
         return melspectrogram
 
     def load_pyin(self, audio_fname):
-        if audio_fname in self.f0_dict:
-            return self.f0_dict[audio_fname]
+        if audio_fname in self.cache:
+            return self.cache[audio_fname]
 
         audio, sample_rate = librosa.core.load(audio_fname)
-        f0, voiced_flag, voiced_probs = librosa.pyin(
-            audio, sr=sample_rate, fmin=librosa.note_to_hz("C2"), fmax=librosa.note_to_hz("C7"), fill_na=0
-        )
+        f0, _, _ = librosa.pyin(audio, sr=sample_rate, fmin=librosa.note_to_hz("C2"), fmax=librosa.note_to_hz("C7"), fill_na=0)
         pad_width = self.max_pad - f0.shape[0]
         f0 = f0 / librosa.note_to_hz("C7")
         f0 = np.pad(f0, pad_width=(0, pad_width), mode="constant")
         f0 = torch.tensor(f0)
-        self.f0_dict[audio_fname] = f0
+        self.cache[audio_fname] = f0
         return f0
 
     def load_waveform(self, audio_fname):
-        audio, sample_rate = librosa.core.load(audio_fname, sr=self.w2v.sampling_rate)
-        waveform = self.w2v(
-            audio,
-            sampling_rate=self.w2v.sampling_rate,
-            max_length=self.max_length,
-            truncation=True,
-            return_tensors="pt",
-            padding=True,
-        )
-        waveform = waveform["input_values"].squeeze(0)
-        n_pad = self.max_length - len(waveform)
-        waveform = F.pad(waveform, (0, n_pad), "constant", 0)
+        waveform, _ = librosa.core.load(audio_fname, sr=self.sampling_rate)
+        waveform = librosa.util.normalize(waveform)
+        assert waveform.shape[0] < self.max_length
+        waveform = waveform[: self.max_length]
+        pad_width = self.max_length - waveform.shape[0]
+        waveform = np.pad(waveform, pad_width=(0, pad_width), mode="constant")
+
+        waveform = torch.tensor(waveform).unsqueeze(0)
         return waveform
 
     def get_tone_label(self, audio_file):
