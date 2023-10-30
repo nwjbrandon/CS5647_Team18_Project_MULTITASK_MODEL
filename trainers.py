@@ -202,10 +202,6 @@ class MultiTaskClassificationTrainer:
         _, predicted = torch.max(out.data, 1)
         label = label.detach().cpu().numpy().tolist()
         predicted = predicted.detach().cpu().numpy().tolist()
-        if -1 in predicted:
-            print(out)
-            print(predicted)
-            raise
         return label, predicted
 
     def train(self):
