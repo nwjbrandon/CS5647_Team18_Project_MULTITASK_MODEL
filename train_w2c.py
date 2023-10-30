@@ -21,7 +21,7 @@ def main():
         "n_mfcc": 128,
         "n_mels": 128,
         "sampling_rate": 16000,
-        "max_length": 16000,
+        "max_length": 24000,
         "max_pad": 60,
         "n_tones": 4,
         "n_pinyins": 410,

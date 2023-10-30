@@ -96,10 +96,10 @@ class TonePerfectDataset(Dataset):
         return f0
 
     def load_waveform(self, audio_fname):
-        waveform, _ = librosa.core.load(audio_fname)
+        waveform, _ = librosa.core.load(audio_fname, sr=self.sampling_rate)
         waveform = librosa.util.normalize(waveform)
+        assert waveform.shape[0] < self.max_length
         waveform = waveform[: self.max_length]
-
         pad_width = self.max_length - waveform.shape[0]
         waveform = np.pad(waveform, pad_width=(0, pad_width), mode="constant")
 
