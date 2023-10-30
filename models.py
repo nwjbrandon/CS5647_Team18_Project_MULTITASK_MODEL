@@ -161,8 +161,10 @@ class Wav2LetterFeatureExtractor(nn.Module):
             nn.ReLU(),
             nn.BatchNorm2d(256),
             nn.MaxPool2d(2),
-            # nn.AdaptiveAvgPool2d(1),
-            # nn.Flatten(start_dim=1),
+            nn.Conv2d(256, 512, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.BatchNorm2d(512),
+            nn.MaxPool2d(2),
         )
 
         self.flat1 = nn.Flatten(start_dim=2)
