@@ -134,32 +134,64 @@ class MultiTaskPYINClassificationModel(nn.Module):
         return tone_out, pinyin_out
 
 
+class SelectItem(nn.Module):
+    def __init__(self, item_index):
+        super(SelectItem, self).__init__()
+        self._name = "selectitem"
+        self.item_index = item_index
+
+    def forward(self, inputs):
+        return inputs[self.item_index]
+
+
 class Wav2LetterFeatureExtractor(nn.Module):
     def __init__(self, hyperparams):
         super().__init__()
         self.hyperparams = hyperparams
         self.net = nn.Sequential(
-            nn.Conv1d(1, 64, kernel_size=63),
-            nn.BatchNorm1d(64),
-            nn.MaxPool1d(16),
-            nn.Conv1d(64, 64, kernel_size=15),
-            nn.BatchNorm1d(64),
-            nn.MaxPool1d(4),
-            nn.Conv1d(64, 128, kernel_size=9),
-            nn.BatchNorm1d(128),
-            nn.MaxPool1d(4),
-            nn.Conv1d(128, 256, kernel_size=9),
-            nn.BatchNorm1d(256),
-            nn.MaxPool1d(4),
-            nn.Conv1d(256, 512, kernel_size=9),
-            nn.BatchNorm1d(512),
-            nn.MaxPool1d(4),
+            nn.Conv2d(1, 64, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.BatchNorm2d(64),
+            nn.MaxPool2d(2),
+            nn.Conv2d(64, 128, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.BatchNorm2d(128),
+            nn.MaxPool2d(2),
+            nn.Conv2d(128, 256, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.BatchNorm2d(256),
+            nn.MaxPool2d(2),
+            # nn.AdaptiveAvgPool2d(1),
+            # nn.Flatten(start_dim=1),
+        )
+
+        self.flat1 = nn.Flatten(start_dim=2)
+
+        self.rnn = nn.Sequential(
+            nn.GRU(
+                4096,
+                256,
+                1,
+                batch_first=True,
+                bidirectional=True,
+            ),
+            SelectItem(0),
+        )
+
+        self.flat2 = nn.Sequential(
+            nn.AdaptiveAvgPool1d(1),
             nn.Flatten(start_dim=1),
-            nn.Linear(1536, 512)
         )
 
     def forward(self, x):
         x = self.net(x)
+
+        x = x.permute(0, 3, 2, 1)
+        x = self.flat1(x)
+        x = self.rnn(x)
+
+        x = x.permute(0, 2, 1)
+        x = self.flat2(x)
         return x
 
 

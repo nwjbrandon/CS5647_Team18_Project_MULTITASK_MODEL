@@ -202,6 +202,10 @@ class MultiTaskClassificationTrainer:
         _, predicted = torch.max(out.data, 1)
         label = label.detach().cpu().numpy().tolist()
         predicted = predicted.detach().cpu().numpy().tolist()
+        if -1 in predicted:
+            print(out)
+            print(predicted)
+            raise
         return label, predicted
 
     def train(self):
@@ -234,6 +238,7 @@ class MultiTaskClassificationTrainer:
         y_true_pinyin = torch.tensor(y_true_pinyin)
         y_pred_pinyin = torch.tensor(y_pred_pinyin)
         loss = np.sum(losses) / len(losses)
+        print(torch.unique(y_pred_tone), torch.unique(y_true_tone))
         tone_acc = self.tone_metric(y_pred_tone, y_true_tone).item()
         pinyin_acc = self.pinyin_metric(y_pred_pinyin, y_true_pinyin).item()
         return tone_acc, pinyin_acc, loss
